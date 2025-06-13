@@ -50,7 +50,7 @@ def mandelbrot(a, b, max_iter):
     return max_iter
 
 # 彫刻用の cutter 生成
-def generate_cutter(ix0, ix1):
+def generate_cutter(ix0, ix1, level):
     x0 = -IMAGE_R + IMAGE_R * 2 * ix0 / NUM_PIXELS
     x1 = -IMAGE_R + IMAGE_R * 2 * ix1 / NUM_PIXELS
     x_thick = x1 - x0
@@ -98,8 +98,10 @@ def generate_cutter(ix0, ix1):
     else:
         # 分割-->統合
         ixc = (ix0 + ix1) // 2
-        sub0 = generate_cutter(ix0, ixc)
-        sub1 = generate_cutter(ixc, ix1)
+        sub0 = generate_cutter(ix0, ixc, level + 1)
+        sub1 = generate_cutter(ixc, ix1, level + 1)
+        
+        print(f'{'  ' * level}Merging: {ix0} to {ix1}')
         return sub0.union(sub1)
 
 # 皿の生成
@@ -123,14 +125,20 @@ dish = (
 )
 
 # マンデルブロ集合を彫り込むための cutter を生成
-cutter = generate_cutter(0, NUM_PIXELS)
+cutter = generate_cutter(0, NUM_PIXELS, 0)
 cutter = cutter.translate((0, 0, FLOOR_H + 0.4))
 
 #show_object(cutter)
 
 # 彫り込み
+print(f'Engraving to dish floor...')
 dish = dish.cut(cutter)
 
 # 出力
+print(f'Rendering...')
 show_object(dish)
+
+print(f'Exporting...')
 dish.export("mandelbrot_sauce_plate.step")
+
+print(f'Finished.')
