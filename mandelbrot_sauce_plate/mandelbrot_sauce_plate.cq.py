@@ -50,13 +50,7 @@ def mandelbrot(a, b, max_iter):
     return max_iter
 
 # 彫刻用の cutter 生成
-def build(ix0, ix1):
-    # 描画範囲の算出
-    real0 = RENDER_REAL - RENDER_R
-    real1 = RENDER_REAL + RENDER_R
-    imag0 = RENDER_IMAG - RENDER_R
-    imag1 = RENDER_IMAG + RENDER_R
-
+def generate_cutter(ix0, ix1):
     x0 = -IMAGE_R + IMAGE_R * 2 * ix0 / NUM_PIXELS
     x1 = -IMAGE_R + IMAGE_R * 2 * ix1 / NUM_PIXELS
     x_thick = x1 - x0
@@ -104,8 +98,8 @@ def build(ix0, ix1):
     else:
         # 分割-->統合
         ixc = (ix0 + ix1) // 2
-        sub0 = build(ix0, ixc)
-        sub1 = build(ixc, ix1)
+        sub0 = generate_cutter(ix0, ixc)
+        sub1 = generate_cutter(ixc, ix1)
         return sub0.union(sub1)
 
 # 皿の生成
@@ -129,7 +123,8 @@ dish = (
 )
 
 # マンデルブロ集合を彫り込むための cutter を生成
-cutter = build(0, NUM_PIXELS).translate((0, 0, FLOOR_H + 0.4))
+cutter = generate_cutter(0, NUM_PIXELS)
+cutter = cutter.translate((0, 0, FLOOR_H + 0.4))
 
 #show_object(cutter)
 
