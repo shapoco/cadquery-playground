@@ -1,5 +1,7 @@
 # CadQuery Playground
 
+CadQuery の勉強・実験用。
+
 ## 初期設定 (Ubuntu24.04.1 LTS / WSL2)
 
 CQ-Editor を使用する前に毎回以下を実行してください。
