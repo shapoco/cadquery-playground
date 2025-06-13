@@ -17,11 +17,16 @@ source ./setup.shrc
 
 ## ファイルの開き方
 
-初期設定を実施した後、以下を実行します (`path/to/script.cq.py` はスクリプトファイルのパス)。
+初期設定を実施した後、以下を実行します。
+`path/to/script.cq.py` はスクリプトファイルのパスです。
 
 ```bash
-CQ-editor path/to/script.cq.py
+CQ-editor path/to/script.cq.py &
 ```
+
+モデルがレンダリングされない場合は ▶ ボタンをクリックしてみてください。
+
+以降はファイルが更新されるたびにスクリプト内の `show_object()` の呼び出しに従って再描画されます。
 
 > [!NOTE]
 > 以下のようなエラーが表示される場合、パッケージが不足している可能性があります。
