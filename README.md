@@ -22,3 +22,23 @@ source ./setup.shrc
 ```bash
 CQ-editor path/to/script.cq.py
 ```
+
+> [!NOTE]
+> 以下のようなエラーが表示される場合、パッケージが不足している可能性があります。
+>
+> ```
+> qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+> This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+> ```
+>
+> Qt のことはよく分からないですが、「[PyQt5をUbuntuで使うときにGUI周りでエラー (WSL2)](https://qiita.com/momomo_rimoto/items/83917d3f9f5dd35457e1)」を参考に以下のパッケージを入れたところ解決しました。
+>
+> ```bash
+> sudo apt install \
+>   libxkbcommon-x11-0 \
+>   libxcb-icccm4 \
+>   libxcb-image0 \
+>   libxcb-keysyms1 \
+>   libxcb-render-util0 \
+>   libxcb-xinerama0
+> ```
