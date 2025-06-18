@@ -1,5 +1,3 @@
-# https://htlab.net/computer/software/cadquery/cadquery-tutorial/
-
 import cadquery as cq
 import numpy as np
 
