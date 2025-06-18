@@ -31,9 +31,12 @@ WALL_T = 3
 # マージン
 MARGIN = 0.5
 
+# ノッチの高さ
+NOTCH_H = 2
+
 # 中心のディスク
 DISC_R = 20
-DISC_H = WALL_H * 2
+DISC_H = WALL_H * 2 + NOTCH_H
 DISC_HOLE_D = 3.5
 DISC_SHOULDER_H = DISC_H - WALL_H
 
@@ -310,26 +313,27 @@ arm0 = (
     cq.Workplane("YZ")
     .polyline(arm_verts)
     .close()
-    .extrude(ARM_W / 2, both=True)
-    .faces("|Z")
-    .faces("not (>Z or <Z)")
-    .edges(">Y")
-    .fillet(3)
-    .faces("<Z")
-    .edges(">Y")
-    .fillet(5)
 )
+show_object(arm0)
+arm0 = arm0.extrude(ARM_W / 2, both=True)
 
-# プリント中に反らないように腕に溝を掘る
-arm_cutter_verts = [
-    (ring_outer_x - RING_W - 5, ring_bottom_y - 1),
-    (ring_outer_x - ring_bottom_y - RING_W + WALL_T - 4, 0 + WALL_T),
-    (ring_outer_x - ring_bottom_y - RING_W + WALL_T + 3, 0 + WALL_T),
-    (ring_outer_x - RING_W, ring_bottom_y - 3),
+# プリント中に反らないためのノッチ
+q = ring_bottom_y * 1 / 3
+arm_notch_verts = [
+    (DISC_R - WALL_T , WALL_T + NOTCH_H),
+    (DISC_R + WALL_T + 2, WALL_T + NOTCH_H),
+    #(ring_outer_x - ring_bottom_y + 1 - NOTCH_H / 2, WALL_T + NOTCH_H),
+    (ring_outer_x - RING_W - NOTCH_H * 3 / 2 - q, ring_bottom_y - 1 - q),
+    (ring_outer_x - RING_W - NOTCH_H * 3 / 2, ring_bottom_y - 1),
     (ring_outer_x - RING_W, ring_bottom_y - 1),
+    (ring_outer_x - RING_W, ring_bottom_y - 2),
+    (ring_outer_x - ring_bottom_y + 1, WALL_T- 1),
+    (DISC_R - WALL_T , WALL_T -1),
 ]
-arm_cutter = cq.Workplane("YZ").polyline(arm_cutter_verts).close().extrude(1, both=True)
-arm0 = arm0.cut(arm_cutter)
+arm_notch = cq.Workplane("YZ").polyline(arm_notch_verts).close()
+show_object(arm_notch)
+arm_notch = arm_notch.extrude(1, both=True)
+arm0 = arm0.union(arm_notch)
 
 frame = disc
 for i in range(0, NUM_ARMS):
