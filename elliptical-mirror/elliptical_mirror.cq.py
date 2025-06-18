@@ -176,11 +176,13 @@ hole_guide = (
     cq.Workplane("YZ")
     .polyline(hole_guide_verts)
     .close()
-    .translate((0,0,DISC_H + DISH_T))
+    .translate((0, 0, DISC_H + DISH_T))
     # .revolve(360 / SPLIT, (0, 0, 0), (0, 1, 0))
 )
 show_object(hole_guide)
-hole_guide = hole_guide.revolve(360 / SPLIT, (0, 0, 0), (0, 1, 0)).translate((0,0,DISC_H + DISH_T))
+hole_guide = hole_guide.revolve(360 / SPLIT, (0, 0, 0), (0, 1, 0)).translate(
+    (0, 0, DISC_H + DISH_T)
+)
 
 # リングのガイド
 ring_guide_verts = [
@@ -189,7 +191,7 @@ ring_guide_verts = [
     (-RING_OFST_X, -RING_OFST_Y + 0.5),
     (-RING_OFST_X, -RING_OFST_Y),
     (-RING_W, -RING_OFST_Y),
-    (-RING_W, -RING_OFST_Y +RING_H),
+    (-RING_W, -RING_OFST_Y + RING_H),
     (0, -RING_OFST_Y + RING_H),
 ]
 for i in range(len(ring_guide_verts)):
@@ -218,6 +220,8 @@ dish = (
 show_object(dish)
 
 dish = dish.rotate((0, 0, 0), (0, 1, 0), 90).translate((0, 0, -MARGIN / 2))
+
+dish.export("dish_single.step")
 
 dishes = cq.Assembly()
 for i in range(0, SPLIT):
@@ -273,10 +277,8 @@ ring = (
 ring_cutter = (
     ring.faces("<Z")
     .workplane()
-    # .rect(ARM_W + MARGIN, RING_W * 2)
-    .rect(ARM_W, RING_W * 2)
+    .rect(ARM_W + MARGIN, RING_W * 2)
     .extrude(-1 - MARGIN / 2, combine=False)
-    #.extrude(-1, combine=False)
     .translate((0, ring_outer_x - RING_W / 2))
 )
 # show_object(ring_cutter)
@@ -292,7 +294,7 @@ ring = ring.rotate((0, 0, 0), (0, 1, 0), 180).translate((0, 0, ring_bottom_y + W
 
 ring.export("ring.step")
 
-p = WALL_T * (np.sqrt(3) - 1)
+p = WALL_T
 arm_verts = [
     (DISC_R - WALL_T, 0),
     (ring_outer_x - ring_bottom_y + p, 0),
@@ -317,6 +319,17 @@ arm0 = (
     .edges(">Y")
     .fillet(5)
 )
+
+# プリント中に反らないように腕に溝を掘る
+arm_cutter_verts = [
+    (ring_outer_x - RING_W - 5, ring_bottom_y - 1),
+    (ring_outer_x - ring_bottom_y - RING_W + WALL_T - 4, 0 + WALL_T),
+    (ring_outer_x - ring_bottom_y - RING_W + WALL_T + 3, 0 + WALL_T),
+    (ring_outer_x - RING_W, ring_bottom_y - 3),
+    (ring_outer_x - RING_W, ring_bottom_y - 1),
+]
+arm_cutter = cq.Workplane("YZ").polyline(arm_cutter_verts).close().extrude(1, both=True)
+arm0 = arm0.cut(arm_cutter)
 
 frame = disc
 for i in range(0, NUM_ARMS):
