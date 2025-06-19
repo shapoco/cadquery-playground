@@ -165,25 +165,18 @@ edge_y += dish_offset
 # show_object(dish_wall)
 
 # 穴のガイド
+z = DISC_H + DISH_T
 hole_guide_verts = [
-    (HOLE_R, 0),
-    (DISC_R + WALL_T, 0),
-    (DISC_R + WALL_T, -DISH_T - WALL_H),
-    (DISC_R, -DISH_T - WALL_H),
-    (DISC_R, -DISH_T),
-    (HOLE_R, -DISH_T),
+    (HOLE_R, z),
+    (DISC_R + WALL_T, z),
+    (DISC_R + WALL_T, z - DISH_T - WALL_H),
+    (DISC_R, z - DISH_T - WALL_H),
+    (DISC_R, z - DISH_T),
+    (HOLE_R, z - DISH_T),
 ]
-hole_guide = (
-    cq.Workplane("YZ")
-    .polyline(hole_guide_verts)
-    .close()
-    .translate((0, 0, DISC_H + DISH_T))
-    # .revolve(360 / SPLIT, (0, 0, 0), (0, 1, 0))
-)
+hole_guide = cq.Workplane("YZ").polyline(hole_guide_verts).close()
 show_object(hole_guide)
-hole_guide = hole_guide.revolve(360 / SPLIT, (0, 0, 0), (0, 1, 0)).translate(
-    (0, 0, DISC_H + DISH_T)
-)
+hole_guide = hole_guide.revolve(360 / SPLIT, (0, 0, 0), (0, 1, 0))
 
 # リングのガイド
 ring_guide_verts = [
@@ -218,6 +211,77 @@ dish = (
     .cutBlind(-MARGIN / 2)
 )
 
+JIG_Z_MIN = -10
+
+v00 = hole_guide_verts[1]
+v01 = hole_guide_verts[2]
+v02 = hole_guide_verts[3]
+v03 = (v02[0], v02[1] - WALL_T)
+v06 = ring_guide_verts[6]
+v07 = ring_guide_verts[5]
+v08 = ring_guide_verts[4]
+v09 = ring_guide_verts[3]
+
+dy = v06[0] - v03[0]
+dz = v06[1] - v03[1]
+norm_y = dz
+norm_z = -dy
+norm_d = np.sqrt(norm_y**2 + norm_z**2)
+norm_y /= norm_d
+norm_z /= norm_d
+angle = np.arctan2(dz, dy) * 180 / np.pi
+
+h = 10
+v04 = (v03[0] + norm_y * h, v03[1] + norm_z * h)
+v05 = (v06[0] + norm_y * h, v06[1] + norm_z * h)
+h = WALL_T
+v10 = ((v09[0] + v00[0]) / 2 + norm_y * h, (v09[1] + v00[1]) / 2 + norm_z * h)
+jig_rot_verts = [
+    v00,
+    v01,
+    v02,
+    v03,
+    v04,
+    v05,
+    v06,
+    v07,
+    v08,
+    v09,
+    v10,
+]
+
+jig_profile = cq.Workplane("YZ").polyline(jig_rot_verts).close()
+
+jig = (
+    jig_profile.revolve(360 / SPLIT, (0, 0, 0), (0, 1, 0))
+    .faces(">X")
+    .extrude(1.5)
+    .rotate((0, 0, 0), (0, 0, 1), -360 / SPLIT)
+    .faces("<X")
+    .extrude(-1.5)
+    .rotate((0, 0, 0), (0, 0, 1), 360 / SPLIT)
+    .cut(dish)
+)
+
+r_axis0 = (0, v03[0], v03[1])
+r_axis1 = (
+    r_axis0[1] * np.sin(-2 * np.pi / SPLIT),
+    r_axis0[1] * np.cos(-2 * np.pi / SPLIT),
+    r_axis0[2],
+)
+jig = (
+    jig.rotate(r_axis0, r_axis1, angle)
+    .rotate((0, 0, 0), (0, 0, 1), -180 / SPLIT)
+    .translate((0, 0, -v03[1] + WALL_T * 2))
+)
+
+jig_cutter = cq.Workplane("XY").rect(-DISH_R * 4, DISH_R * 4).extrude(-WALL_T * 10)
+# show_object(jig_cutter)
+jig = jig.cut(jig_cutter)
+
+show_object(jig_profile)
+show_object(jig.translate((DISH_R * 1.2, -DISH_R * 2 / 3, 0)))
+
 show_object(dish)
 
 dish = dish.rotate((0, 0, 0), (0, 1, 0), 90).translate((0, 0, -MARGIN / 2))
@@ -230,6 +294,9 @@ for i in range(0, SPLIT):
 # show_object(dishes)
 
 dishes.export("dishes.step")
+
+jig.export("jig.step")
+
 
 disc_verts = [
     (0, 0),
@@ -307,26 +374,22 @@ arm_verts = [
     (DISC_R - WALL_T, WALL_T),
 ]
 
-arm0 = (
-    cq.Workplane("YZ")
-    .polyline(arm_verts)
-    .close()
-)
+arm0 = cq.Workplane("YZ").polyline(arm_verts).close()
 show_object(arm0)
 arm0 = arm0.extrude(ARM_W / 2, both=True)
 
 # プリント中に反らないためのノッチ
 q = ring_bottom_y * 1 / 3
 arm_notch_verts = [
-    (DISC_R - WALL_T , WALL_T + NOTCH_H),
+    (DISC_R - WALL_T, WALL_T + NOTCH_H),
     (DISC_R + WALL_T + 2, WALL_T + NOTCH_H),
-    #(ring_outer_x - ring_bottom_y + 1 - NOTCH_H / 2, WALL_T + NOTCH_H),
+    # (ring_outer_x - ring_bottom_y + 1 - NOTCH_H / 2, WALL_T + NOTCH_H),
     (ring_outer_x - RING_W - NOTCH_H * 3 / 2 - q, ring_bottom_y - 1 - q),
     (ring_outer_x - RING_W - NOTCH_H * 3 / 2, ring_bottom_y - 1),
     (ring_outer_x - RING_W, ring_bottom_y - 1),
     (ring_outer_x - RING_W, ring_bottom_y - 2),
-    (ring_outer_x - ring_bottom_y + 1, WALL_T- 1),
-    (DISC_R - WALL_T , WALL_T -1),
+    (ring_outer_x - ring_bottom_y + 1, WALL_T - 1),
+    (DISC_R - WALL_T, WALL_T - 1),
 ]
 arm_notch = cq.Workplane("YZ").polyline(arm_notch_verts).close()
 show_object(arm_notch)
