@@ -197,11 +197,11 @@ ring_guide = cq.Workplane("YZ").polyline(ring_guide_verts).close()
 show_object(ring_guide)
 ring_guide = ring_guide.revolve(360 / SPLIT, (0, 0, 0), (0, 1, 0))
 
-dish = dish_wall.union(hole_guide).union(ring_guide)
+dish_without_margin = dish_wall.union(hole_guide).union(ring_guide)
 
 # 隣の皿とぶつからないように若干痩せさせる
 dish = (
-    dish.faces("<X")
+    dish_without_margin.faces("<X")
     .workplane()
     .rect(edge_x * 2.5, edge_y * 2.5)
     .cutBlind(-MARGIN / 2)
@@ -260,7 +260,7 @@ jig = (
     .faces("<X")
     .extrude(-1.5)
     .rotate((0, 0, 0), (0, 0, 1), 360 / SPLIT)
-    .cut(dish)
+    .cut(dish_without_margin)
 )
 
 r_axis0 = (0, v03[0], v03[1])
@@ -273,14 +273,48 @@ jig = (
     jig.rotate(r_axis0, r_axis1, angle)
     .rotate((0, 0, 0), (0, 0, 1), -180 / SPLIT)
     .translate((0, 0, -v03[1] + WALL_T * 2))
+    .translate((0, -DISH_R * 3 / 4, 0))
 )
 
-jig_cutter = cq.Workplane("XY").rect(-DISH_R * 4, DISH_R * 4).extrude(-WALL_T * 10)
-# show_object(jig_cutter)
+jig_cutter = cq.Workplane("XY").rect(-DISH_R * 2, DISH_R * 2).extrude(-WALL_T * 10)
 jig = jig.cut(jig_cutter)
 
+jig_hole_verts = [
+    (-12, DISH_R * 0.3),
+    (12, DISH_R * 0.3),
+    (4, -DISH_R * 0.3),
+    (-4, -DISH_R * 0.3),
+]
+jig_hole = (
+    cq.Workplane("XY")
+    .polyline(jig_hole_verts)
+    .close()
+    .extrude(50)
+    .edges("|Z")
+    .fillet(3)
+    .translate((0, 0, 3))
+)
+jig = (
+    jig.cut(jig_hole)
+    .faces("<Z")
+    .workplane()
+    .pushPoints([(0, -15), (0, 15)])
+    .circle(3.5 / 2)
+    .cutBlind(-10)
+    .faces("+Z")
+    .edges()[-2:]
+    .chamfer(2)
+    .faces("<Z")
+    .workplane()
+    .pushPoints([(0, 0)])
+    .circle(5)
+    .cutBlind(-10)
+)
+
+show_object(jig)
+
 show_object(jig_profile)
-show_object(jig.translate((DISH_R * 1.2, -DISH_R * 2 / 3, 0)))
+show_object(jig.translate((DISH_R * 1.5, 0, 0)))
 
 show_object(dish)
 
@@ -296,7 +330,6 @@ for i in range(0, SPLIT):
 dishes.export("dishes.step")
 
 jig.export("jig.step")
-
 
 disc_verts = [
     (0, 0),
@@ -339,7 +372,10 @@ ring_verts = [
 ]
 
 ring = (
-    cq.Workplane("YZ").polyline(ring_verts).close().revolve(360, (0, 0, 0), (0, 1, 0))
+    cq.Workplane("YZ")
+    .polyline(ring_verts)
+    .close()
+    .revolve(360, (0, 0, 0), (0, 1, 0))
 )
 
 ring_cutter = (
@@ -356,7 +392,9 @@ for i in range(0, NUM_ARMS):
 
 show_object(ring)
 
-ring = ring.rotate((0, 0, 0), (0, 1, 0), 180).translate((0, 0, ring_bottom_y + WALL_H))
+ring = ring.rotate((0, 0, 0), (0, 1, 0), 180).translate(
+    (0, 0, ring_bottom_y + WALL_H)
+)
 
 # show_object(ring)
 
