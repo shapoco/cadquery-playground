@@ -56,10 +56,6 @@ M3_NUT_T = 3
 STEP_OUT_DIR = "./step"
 STL_OUT_DIR = "./stl"
 
-# 警告がウザいので自前の wrapper をかます
-def show_obj(obj):
-    show_object(obj)
-
 
 # お皿の部分
 class Dish:
@@ -308,6 +304,7 @@ class DishJig:
     def export(self):
         self.solid.export(f"{STEP_OUT_DIR}/dish_jig.step")
         self.solid.export(f"{STL_OUT_DIR}/dish_jig.stl")
+
 
 class Ring:
     def __init__(self, dish: Dish):
