@@ -53,6 +53,7 @@ M3_CHAMFER = 3.5
 M3_NUT_S = 5.4
 M3_NUT_T = 3
 
+OUT_DIR = "./step"
 
 # 警告がウザいので自前の wrapper をかます
 def show_obj(obj):
@@ -189,13 +190,13 @@ class Dish:
         single = self.solid.rotate((0, 0, 0), (0, 1, 0), 90).translate(
             (0, 0, -MARGIN / 2)
         )
-        single.export("dish_single.step")
+        single.export(f"{OUT_DIR}/dish_single.step")
 
         # まとめて印刷する用に並べる
         array = cq.Assembly()
         for i in range(0, SPLIT):
             array.add(single.translate((i * (6 + DISH_T), i * -(3 + DISH_T), 0)))
-        array.export("dish_array.step")
+        array.export(f"{OUT_DIR}/dish_array.step")
 
 
 class DishJig:
@@ -306,7 +307,7 @@ class DishJig:
         self.solid = solid
 
     def export(self):
-        self.solid.export("dish_jig.step")
+        self.solid.export(f"{OUT_DIR}/dish_jig.step")
 
 
 class Ring:
@@ -346,7 +347,7 @@ class Ring:
         flipped = self.solid.rotate((0, 0, 0), (0, 1, 0), 180).translate(
             (0, 0, self.bottom_y + RING_H)
         )
-        flipped.export("disc.step")
+        flipped.export(f"{OUT_DIR}/ring.step")
 
 
 class Frame:
@@ -422,7 +423,7 @@ class Frame:
         self.solid = solid
 
     def export(self):
-        self.solid.export("frame.step")
+        self.solid.export(f"{OUT_DIR}/frame.step")
 
 
 dish = Dish()
