@@ -163,11 +163,12 @@ class Dish:
             ring_guide_verts[3],
         ]
 
-        model_without_margin = wall.union(hole_guide).union(ring_guide)
+        # 治具を彫るためのマージンなしのソリッド
+        solid_without_margin = wall.union(hole_guide).union(ring_guide)
 
         # 隣の皿とぶつからないように若干痩せさせる
         self.solid = (
-            model_without_margin.faces("<X")
+            solid_without_margin.faces("<X")
             .workplane()
             .rect(edge_y * 2.5, edge_z * 2.5)
             .cutBlind(-MARGIN / 2)
@@ -177,7 +178,7 @@ class Dish:
             .cutBlind(-MARGIN / 2)
         )
 
-        self.model_without_margin = model_without_margin
+        self.model_without_margin = solid_without_margin
         self.edge_x = edge_y
         self.edge_y = edge_z
         self.jig_verts0 = jig_verts0
