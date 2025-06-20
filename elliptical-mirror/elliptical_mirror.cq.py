@@ -72,21 +72,16 @@ class Dish:
         angle_start = np.arcsin(HOLE_R / radius_y) * 180 / np.pi
         angle_end = np.arcsin(DISH_R / radius_y) * 180 / np.pi
 
-        # 穴の座標
-        hole_y = np.sin(angle_start * np.pi / 180) * radius_y
-        hole_z = -np.cos(angle_start * np.pi / 180) * radius_z
+        # 中央の穴のエッジの座標
+        inner_edge_y = np.sin(angle_start * np.pi / 180) * radius_y
+        inner_edge_z = -np.cos(angle_start * np.pi / 180) * radius_z
 
         # 皿の外縁部の座標
-        edge_norm_x = np.cos(angle_end * np.pi / 180)
-        edge_norm_y = -np.sin(angle_end * np.pi / 180) * radius_y / radius_z
-        d = np.sqrt(edge_norm_x**2 + edge_norm_y**2)
-        edge_norm_x /= d
-        edge_norm_y /= d
-        edge_y = np.sin(angle_end * np.pi / 180) * (radius_y + DISH_T)
-        edge_z = -np.cos(angle_end * np.pi / 180) * (radius_z + DISH_T)
+        outer_edge_y = np.sin(angle_end * np.pi / 180) * (radius_y + DISH_T)
+        outer_edge_z = -np.cos(angle_end * np.pi / 180) * (radius_z + DISH_T)
 
         # 高さ調整
-        z_offset = -hole_z + DISC_H + DISH_T
+        z_offset = -inner_edge_z + DISC_H + DISH_T
 
         # 皿
         wall_profile = (
@@ -99,7 +94,7 @@ class Dish:
                 sense=1,
                 startAtCurrent=False,
             )
-            .lineTo(edge_y, edge_z)
+            .lineTo(outer_edge_y, outer_edge_z)
             .ellipseArc(
                 radius_y + DISH_T,
                 radius_z + DISH_T,
@@ -115,7 +110,7 @@ class Dish:
             (0, 0, z_offset)
         )
 
-        edge_z += z_offset
+        outer_edge_z += z_offset
 
         # 穴のガイド
         z = DISC_H + DISH_T
@@ -149,8 +144,8 @@ class Dish:
         ]
         for i in range(len(ring_guide_verts)):
             x, y = ring_guide_verts[i]
-            x += edge_y
-            y += edge_z
+            x += outer_edge_y
+            y += outer_edge_z
             ring_guide_verts[i] = (x, y)
         outer_guide_profile = cq.Workplane("YZ").polyline(ring_guide_verts).close()
         ring_guide = outer_guide_profile.revolve(360 / SPLIT, (0, 0, 0), (0, 1, 0))
@@ -170,17 +165,17 @@ class Dish:
         self.solid = (
             solid_without_margin.faces("<X")
             .workplane()
-            .rect(edge_y * 2.5, edge_z * 2.5)
+            .rect(outer_edge_y * 2.5, outer_edge_z * 2.5)
             .cutBlind(-MARGIN / 2)
             .faces(">X")
             .workplane()
-            .rect(edge_y * 2.5, edge_z * 2.5)
+            .rect(outer_edge_y * 2.5, outer_edge_z * 2.5)
             .cutBlind(-MARGIN / 2)
         )
 
         self.model_without_margin = solid_without_margin
-        self.edge_x = edge_y
-        self.edge_y = edge_z
+        self.outer_edge_x = outer_edge_y
+        self.outer_edge_y = outer_edge_z
         self.jig_verts0 = jig_verts0
         self.jig_verts1 = jig_verts1
         self.wall_profile = wall_profile
@@ -317,8 +312,8 @@ class DishJig:
 class Ring:
     def __init__(self, dish: Dish):
         # リングの原型
-        outer_x = dish.edge_x
-        bottom_y = dish.edge_y - RING_OFST_Y
+        outer_x = dish.outer_edge_x
+        bottom_y = dish.outer_edge_y - RING_OFST_Y
         verts = [
             (outer_x - RING_W, bottom_y),
             (outer_x, bottom_y),
