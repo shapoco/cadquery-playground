@@ -53,6 +53,8 @@ M3_CHAMFER = 3.5
 M3_NUT_S = 5.4
 M3_NUT_T = 3
 
+CHAMFER = 1
+
 STEP_OUT_DIR = "./step"
 STL_OUT_DIR = "./stl"
 
@@ -312,10 +314,11 @@ class Ring:
         outer_x = dish.outer_edge_x
         bottom_y = dish.outer_edge_y - RING_OFST_Y
         verts = [
-            (outer_x - RING_W, bottom_y),
             (outer_x, bottom_y),
             (outer_x, bottom_y + RING_H),
-            (outer_x - RING_W, bottom_y + RING_H),
+            (outer_x - RING_W + CHAMFER, bottom_y + RING_H),
+            (outer_x - RING_W, bottom_y + RING_H - CHAMFER),
+            (outer_x - RING_W, bottom_y),
         ]
         solid = (
             cq.Workplane("YZ")
@@ -351,16 +354,23 @@ class Frame:
     def __init__(self, ring: Ring):
 
         # 中央の円盤
+        #
+        #   6---5
+        #  /     \
+        # 7       4
+        # |       |
+        # |       3--2
+        # |          |
+        # 0----------1
         disc_verts = [
             (0, 0),
             (DISC_R + WALL_T, 0),
             (DISC_R + WALL_T, DISC_SHOULDER_H),
-            # (DISC_R - MARGIN / 2, DISC_SHOULDER_H),
-            # (DISC_R - MARGIN / 2, DISC_SHOULDER_H + WALL_H),
             (DISC_R, DISC_SHOULDER_H),
-            (DISC_R, DISC_SHOULDER_H + WALL_H),
-            (M3_CHAMFER, DISC_SHOULDER_H + WALL_H),
-            (0, DISC_SHOULDER_H + WALL_H - M3_CHAMFER),
+            (DISC_R, DISC_H - CHAMFER),
+            (DISC_R - CHAMFER, DISC_H),
+            (M3_CHAMFER, DISC_H),
+            (0, DISC_H - M3_CHAMFER),
         ]
         disc = (
             cq.Workplane("YZ")
