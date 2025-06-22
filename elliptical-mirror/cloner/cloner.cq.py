@@ -158,7 +158,5 @@ base = Base()
 show_object(ref.solid, name="Reflector")
 show_object(base.solid.translate((0, 20, 0)), name="Base")
 
-ref.solid.export(f"{STEP_OUT_DIR}/reflector.step")
-ref.solid.export(f"{STL_OUT_DIR}/reflector.stl")
 base.solid.export(f"{STEP_OUT_DIR}/base.step")
 base.solid.export(f"{STL_OUT_DIR}/base.stl")
