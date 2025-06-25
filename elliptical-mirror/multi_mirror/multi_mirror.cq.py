@@ -157,4 +157,4 @@ show_object(
     .rotate((0, 1, 0), (0, 0, 0), ELLIPSE_ANGLE)
 )
 
-ref.solid.export(f"{STEP_OUT_DIR}/trial.step")
+ref.solid.export(f"{STEP_OUT_DIR}/multi_mirror.step")
