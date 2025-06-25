@@ -30,7 +30,7 @@ STEP_OUT_DIR = "./step"
 class Reflector:
     def __init__(self):
         inner_radius = 10
-        outer_radius = 55
+        outer_radius = 60
         height = 65
 
         inner_sin = inner_radius * math.sin(math.pi / NUM_REFLECTORS)
@@ -54,7 +54,7 @@ class Reflector:
         cutter = (
             cq.Workplane("XY")
             .box(400, 400, 200, centered=(True, True, False))
-            .translate((0, 0, -200))
+            .translate((0, 0, -200 - 10))
         )
         cutter = cutter.union(
             cq.Workplane("XY")
@@ -74,8 +74,8 @@ class Reflector:
         solid = solid.cut(cutter)
 
         # LED 取り付け用の溝を掘る
-        x = outer_radius - 5 - GAP
-        y = LED_ARM_HOLE_DISTANCE / 2 + 5 + GAP
+        x = outer_radius - 5
+        y = 10
         verts = [
             (x, -y),
             (x, y),
@@ -113,23 +113,25 @@ class Reflector:
                     (CAP_HOLE2_RADIUS, CAP_HOLE2_DISTANCE / 2),
                 ]
             )
-            .circle(1)
+            .circle(2.5 / 2)
             .cutBlind(-5)
             .faces(">>X[-3]")
             .workplane(origin=(0, 0, 0))
             .pushPoints(
                 [
-                    (-LED_ARM_HOLE_DISTANCE / 2, height - 10),
-                    (LED_ARM_HOLE_DISTANCE / 2, height - 10),
+                    (0, height - 10),
+                    (0, height - 10 - LED_ARM_HOLE_DISTANCE),
                 ]
             )
-            .circle(1)
+            .circle(2.5 / 2)
             .cutBlind(-5)
         )
 
         # 面取り
         solid = (
-           solid.faces("<X or <<Y[-2] or >>Y[-2] or <<Z[-2]")
+           solid
+           #.faces("<X or <<Y[-2] or >>Y[-2] or <<Z[-2]")
+           .faces("<X or <<Y[-2] or >>Y[-2] or <<Z[-3]")
            .chamfer(1)
            .edges("%circle")
            .chamfer(0.5)
