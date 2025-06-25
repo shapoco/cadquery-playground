@@ -18,10 +18,12 @@ ELLIPSE_ANGLE = 45
 GAP = 0.2
 
 # 固定用キャップの穴の間隔 [mm]
-CAP_HOLE_DISTANCE = 10
+CAP_HOLE1_RADIUS = 15
+CAP_HOLE2_RADIUS = 30
+CAP_HOLE2_DISTANCE = 20
 
 # LED アームの取り付け用穴の間隔 [mm]
-LED_ARM_HOLE_DISTANCE = 15
+LED_ARM_HOLE_DISTANCE = 10
 
 STEP_OUT_DIR = "./step"
 
@@ -73,7 +75,7 @@ class Reflector:
 
         # LED 取り付け用の溝を掘る
         x = outer_radius - 5 - GAP
-        y = 15 + GAP
+        y = LED_ARM_HOLE_DISTANCE / 2 + 5 + GAP
         verts = [
             (x, -y),
             (x, y),
@@ -106,13 +108,14 @@ class Reflector:
             .workplane(origin=(0, 0, 0))
             .pushPoints(
                 [
-                    (25, -CAP_HOLE_DISTANCE / 2),
-                    (25, CAP_HOLE_DISTANCE / 2),
+                    (CAP_HOLE1_RADIUS, 0),
+                    (CAP_HOLE2_RADIUS, -CAP_HOLE2_DISTANCE / 2),
+                    (CAP_HOLE2_RADIUS, CAP_HOLE2_DISTANCE / 2),
                 ]
             )
             .circle(1)
             .cutBlind(-5)
-            .faces(">>X[-2]")
+            .faces(">>X[-3]")
             .workplane(origin=(0, 0, 0))
             .pushPoints(
                 [
