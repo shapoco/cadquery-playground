@@ -7,9 +7,9 @@ import math
 NUM_REFLECTORS = 6
 
 # 反射板の寸法 [mm]
-REFLECTOR_INNER_RADIUS = 10
-REFLECTOR_OUTER_RADIUS = 60
-REFLECTOR_HEIGHT = 65
+REF_INNER_RADIUS = 10
+REF_OUTER_RADIUS = 60
+REF_HEIGHT = 65
 
 # 焦点間の距離 [mm]
 ELLIPSE_FOCUS_DISTANCE = 40
@@ -40,18 +40,20 @@ CAP_MOUNT_Y = 20
 # LED アームの取り付け用穴の間隔 [mm]
 LED_ARM_HOLE_DISTANCE = 10
 
+ARM_HOLDER_HEIGHT = 30
+
 STEP_OUT_DIR = "./step"
 
 
 class Reflector:
     def __init__(self):
-        inner_sin = REFLECTOR_INNER_RADIUS * math.sin(math.pi / NUM_REFLECTORS)
-        inner_cos = REFLECTOR_INNER_RADIUS * math.cos(math.pi / NUM_REFLECTORS)
+        inner_sin = REF_INNER_RADIUS * math.sin(math.pi / NUM_REFLECTORS)
+        inner_cos = REF_INNER_RADIUS * math.cos(math.pi / NUM_REFLECTORS)
         solid = (
             cq.Workplane("XY")
             .ellipseArc(
-                REFLECTOR_OUTER_RADIUS,
-                REFLECTOR_OUTER_RADIUS,
+                REF_OUTER_RADIUS,
+                REF_OUTER_RADIUS,
                 -180 / NUM_REFLECTORS,
                 180 / NUM_REFLECTORS,
                 startAtCurrent=False,
@@ -59,7 +61,7 @@ class Reflector:
             .lineTo(inner_cos, inner_sin)
             .lineTo(inner_cos, -inner_sin)
             .close()
-            .extrude(REFLECTOR_HEIGHT)
+            .extrude(REF_HEIGHT)
         )
 
         # 楕円面を彫り込む
@@ -86,7 +88,7 @@ class Reflector:
         solid = solid.cut(cutter)
 
         # LED 取り付け用の溝を掘る
-        x = REFLECTOR_OUTER_RADIUS - 5
+        x = REF_OUTER_RADIUS - 5
         y = 10
         verts = [
             (x, -y),
@@ -94,23 +96,21 @@ class Reflector:
             (x + 10, y + 10),
             (x + 10, -y - 10),
         ]
-        cutter = (
-            cq.Workplane("XY").polyline(verts).close().extrude(REFLECTOR_HEIGHT + 10)
-        )
+        cutter = cq.Workplane("XY").polyline(verts).close().extrude(REF_HEIGHT + 10)
         solid = solid.cut(cutter)
 
         # 天井を斜めにする
         verts = [
-            (REFLECTOR_OUTER_RADIUS - 10, REFLECTOR_HEIGHT + 10),
-            (REFLECTOR_OUTER_RADIUS, REFLECTOR_HEIGHT + 10),
-            (REFLECTOR_OUTER_RADIUS, REFLECTOR_HEIGHT - 10),
-            (REFLECTOR_OUTER_RADIUS - 10, REFLECTOR_HEIGHT),
+            (REF_OUTER_RADIUS - 10, REF_HEIGHT + 10),
+            (REF_OUTER_RADIUS, REF_HEIGHT + 10),
+            (REF_OUTER_RADIUS, REF_HEIGHT - 10),
+            (REF_OUTER_RADIUS - 10, REF_HEIGHT),
         ]
         cutter = (
             cq.Workplane("XZ")
             .polyline(verts)
             .close()
-            .extrude(REFLECTOR_OUTER_RADIUS, both=True)
+            .extrude(REF_OUTER_RADIUS, both=True)
         )
         solid = solid.cut(cutter)
 
@@ -131,8 +131,8 @@ class Reflector:
             .workplane(origin=(0, 0, 0))
             .pushPoints(
                 [
-                    (0, REFLECTOR_HEIGHT - 10),
-                    (0, REFLECTOR_HEIGHT - 10 - LED_ARM_HOLE_DISTANCE),
+                    (0, REF_HEIGHT - 10),
+                    (0, REF_HEIGHT - 10 - LED_ARM_HOLE_DISTANCE),
                 ]
             )
             .circle(2.5 / 2)
@@ -160,10 +160,10 @@ class Cap:
             .extrude(5)
             .faces(">Z")
             .workplane()
-            .polygon(NUM_REFLECTORS, REFLECTOR_INNER_RADIUS * 2)
+            .polygon(NUM_REFLECTORS, REF_INNER_RADIUS * 2)
             .cutBlind(-50)
             .rotate((0, 0, 0), (0, 0, 1), 180 / NUM_REFLECTORS)
-            .translate((0, 0, REFLECTOR_HEIGHT))
+            .translate((0, 0, REF_HEIGHT))
         )
 
         # 穴開け
@@ -225,11 +225,56 @@ class Cap:
         self.solid = solid
 
 
+class ArmHolder:
+    def __init__(self):
+        verts = [
+            (0, -10),
+            (2.5, -10),
+            (2.5, -7.5),
+            (5, -7.5),
+            (5, 7.5),
+            (2.5, 7.5),
+            (2.5, 10),
+            (0, 10),
+        ]
+        solid = (
+            cq.Workplane("XY")
+            .polyline(verts)
+            .close()
+            .extrude(ARM_HOLDER_HEIGHT)
+            # 穴開け
+            .faces(">X")
+            .workplane(origin=(0, 0, 0))
+            .pushPoints([(0, 5), (0, 15), (0, 25)])
+            .circle(3.5 / 2)
+            .cutBlind(-50)
+            # 面取り
+            .edges("%circle")
+            .edges("(<X and (>Z or >>Z[-2])) or (>X and <Z)")
+            .chamfer(CHAMFER)
+            .edges("%circle")
+            .edges(">X and (>Z or >>Z[-2]) or (<X and <Z)")
+            .chamfer(2)
+            .edges("not %circle")
+            .edges("<X or >X or <Y or >Y or <Z or >Z")
+            .chamfer(CHAMFER)
+        )
+
+        offset_z = REF_HEIGHT - ARM_HOLDER_HEIGHT - 5
+        offset_x = REF_OUTER_RADIUS
+
+        self.offset_x = offset_x
+        self.offset_z = offset_z
+        self.solid = solid
+
+
 ref = Reflector()
 cap = Cap()
+arm_holder = ArmHolder()
 
 show_object(ref.solid)
 show_object(cap.solid.translate((0, 0, 10)))
+show_object(arm_holder.solid.translate((arm_holder.offset_x, 0, arm_holder.offset_z)))
 
 # 焦点の位置 (参考用)
 show_object(
@@ -245,8 +290,10 @@ show_object(
     .rotate((0, 1, 0), (0, 0, 0), ELLIPSE_ANGLE)
 )
 
-ref_for_export = ref.solid.rotate(
-    (0, 0, REFLECTOR_HEIGHT), (1, 0, REFLECTOR_HEIGHT), 90
-)
-ref_for_export.export(f"{STEP_OUT_DIR}/multi_mirror_reflector.step")
-cap.solid.export(f"{STEP_OUT_DIR}/multi_mirror_cap.step")
+ref_export = ref.solid.rotate((0, 0, REF_HEIGHT), (1, 0, REF_HEIGHT), 90)
+ref_export.export(f"{STEP_OUT_DIR}/reflector.step")
+
+cap.solid.export(f"{STEP_OUT_DIR}/cap.step")
+
+holder_export = arm_holder.solid.rotate((0, 0, 0), (0, 1, 0), -90)
+holder_export.export(f"{STEP_OUT_DIR}/arm_holder.step")
