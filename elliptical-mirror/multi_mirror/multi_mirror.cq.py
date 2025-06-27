@@ -290,7 +290,7 @@ show_object(
     .rotate((0, 1, 0), (0, 0, 0), ELLIPSE_ANGLE)
 )
 
-ref_export = ref.solid.rotate((0, 0, REF_HEIGHT), (1, 0, REF_HEIGHT), 90)
+ref_export = ref.solid.rotate((0, 0, 0), (0, 1, 0), 45)
 ref_export.export(f"{STEP_OUT_DIR}/reflector.step")
 
 cap.solid.export(f"{STEP_OUT_DIR}/cap.step")
