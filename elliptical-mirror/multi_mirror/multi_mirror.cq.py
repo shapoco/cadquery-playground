@@ -391,11 +391,10 @@ class ArmHolder:
             .chamfer(CHAMFER)
         )
 
-        offset_z = REFLECTOR_HEIGHT - ARM_HOLDER_HEIGHT - 5
-        offset_x = REFLECTOR_OUTER_RADIUS
+        solid = solid.translate(
+            (REFLECTOR_OUTER_RADIUS - 5, 0, REFLECTOR_HEIGHT - ARM_HOLDER_HEIGHT - 5)
+        )
 
-        self.offset_x = offset_x
-        self.offset_z = offset_z
         self.solid = solid
 
 
@@ -582,14 +581,16 @@ cap = Cap()
 arm_holder = ArmHolder()
 focus_indicator = FocusIndicator(ref)
 
-show_object(ref.solid)
-show_object(cap.solid.translate((0, 0, 10)))
-show_object(arm_holder.solid.translate((arm_holder.offset_x, 0, arm_holder.offset_z)))
-show_object(focus_indicator.solid)
+offset = 0
+show_object(ref.solid, options={"color": "#0f0"})
+show_object(cap.solid.translate((0, 0, offset)), options={"color": "#08f"})
+show_object(arm_holder.solid, options={"color": "#f80"})
+show_object(focus_indicator.solid, options={"color": "#84f"})
 
 # 焦点の位置 (参考用)
-show_object(cq.Workplane("XY").box(2, 2, 2).translate(ELLIPSE_F_NEAR))
-show_object(cq.Workplane("XY").box(2, 2, 2).translate(ELLIPSE_F_FAR))
+focus_marker = cq.Workplane("XY").box(2, 2, 2)
+show_object(focus_marker.translate(ELLIPSE_F_NEAR), options={"color": "#f00"})
+show_object(focus_marker.translate(ELLIPSE_F_FAR), options={"color": "#f00"})
 
 
 step = ref.solid.rotate((0, 0, 0), (0, 1, 0), 45)
@@ -600,5 +601,7 @@ cap.solid.export(f"{STEP_OUT_DIR}/cap.step")
 step = arm_holder.solid.rotate((0, 0, 0), (0, 1, 0), -90)
 step.export(f"{STEP_OUT_DIR}/arm_holder.step")
 
-step = focus_indicator.solid.rotate((0, 0, 0), (0, 1, 0), focus_indicator.angle_deg + 90)
+step = focus_indicator.solid.rotate(
+    (0, 0, 0), (0, 1, 0), focus_indicator.angle_deg + 90
+)
 step.export(f"{STEP_OUT_DIR}/focus_indicator.step")
