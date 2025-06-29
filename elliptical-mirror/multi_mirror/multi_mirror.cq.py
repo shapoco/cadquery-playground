@@ -108,6 +108,62 @@ def ellipsoid_line_intersection(F1, F2, R_LONG, P1, P2):
     return results
 
 
+def find_ellipsoid_extremal_point(F1, F2, R_LONG, V):
+    TOL = 1e-8
+    MAX_ITER = 100
+
+    # V を正規化
+    V_norm = hypot3d(V)
+    if V_norm == 0:
+        raise ValueError("V must not be zero vector!")
+    v = [x / V_norm for x in V]
+
+    # 2点F1, F2の中心C
+    C = [(F1[i] + F2[i]) * 0.5 for i in range(3)]
+    # F1, F2間の距離
+    d = hypot3d(sub3d(F2, F1))
+    if d > 2 * R_LONG:
+        raise ValueError("2a must be greater than |F1-F2|")
+
+    # tについて1次元探索: P = C + t*v
+    # t_min, t_maxを推定
+    t_min = -2 * R_LONG
+    t_max = 2 * R_LONG
+
+    def constraint(t):
+        # P = C + t*v
+        P = add3d(C, mul3d(v, t))
+        return hypot3d(sub3d(P, F1)) + hypot3d(sub3d(P, F2)) - 2 * R_LONG
+
+    # 満たす t を2分法で探索
+    # V方向に大きいほう（t_max側）で constraint(t)=0 となる点を探す
+    left, right = t_min, t_max
+    # まずright側に解があるようにt_maxを広げる
+    while constraint(right) < 0:
+        right *= 2
+        if abs(right) > 1e6:
+            raise RuntimeError("Failed to bracket solution on + side")
+    # left側に解があるようにt_minを縮める
+    while constraint(left) < 0:
+        left *= 2
+        if abs(left) > 1e6:
+            raise RuntimeError("Failed to bracket solution on - side")
+
+    # 2分法
+    for i in range(MAX_ITER):
+        mid = (left + right) * 0.5
+        c = constraint(mid)
+        if abs(c) < TOL:
+            break
+        if c > 0:
+            right = mid
+        else:
+            left = mid
+    t_star = (left + right) * 0.5
+    P_star = add3d(C, mul3d(v, t_star))
+    return P_star
+
+
 def intersection_plane_line(plane_p, plane_v1, plane_v2, line_p, line_v):
     EPS = 1e-10
     normal = cross3d(plane_v1, plane_v2)
@@ -123,7 +179,7 @@ def intersection_plane_line(plane_p, plane_v1, plane_v2, line_p, line_v):
 
 SCALING = 1.5
 
-ENABLE_CHAMFER = True
+ENABLE_CHAMFER = False
 
 # 反射板の数
 NUM_REFLECTORS = 6
@@ -131,7 +187,6 @@ NUM_REFLECTORS = 6
 # 反射板の寸法 [mm]
 REFLECTOR_INNER_RADIUS = 10 * SCALING
 REFLECTOR_OUTER_RADIUS = 60 * SCALING
-REFLECTOR_HEIGHT = 65 * SCALING
 REFLECTOR_TOP_CUT_SIZE = 10 * SCALING
 REFLECTOR_THICKNESS = 3
 
@@ -148,10 +203,17 @@ ELLIPSE_R_LONG = math.sqrt((ELLIPSE_F_DISTANCE / 2) ** 2 + ELLIPSE_R_SHORT**2)
 ELLIPSE_FLOOR_Z = -10 * SCALING
 
 # 焦点の座標
-ELLIPSE_F_NEAR = rotate3d(
+FOCUS_NEAR = rotate3d(
     (ELLIPSE_F_DISTANCE, 0, 0), (0, 0, 0), (0, -1, 0), math.radians(ELLIPSE_ANGLE)
 )
-ELLIPSE_F_FAR = rotate3d((0, 0, 0), (0, 0, 0), (0, -1, 0), math.radians(ELLIPSE_ANGLE))
+FOCUS_FAR = rotate3d((0, 0, 0), (0, 0, 0), (0, -1, 0), math.radians(ELLIPSE_ANGLE))
+
+# フレームの天井の高さ
+ellipse_top = find_ellipsoid_extremal_point(
+    FOCUS_NEAR, FOCUS_FAR, ELLIPSE_R_LONG, (0, 0, 1)
+)
+FRAME_CEIL_Z = math.ceil(ellipse_top[2] + 10)
+FRAME_THICKNESS = 5
 
 # 嵌合用の隙間 [mm]
 GENERIC_GAP = 0.5
@@ -184,8 +246,8 @@ STEP_OUT_DIR = "./step"
 
 class MirrorSegment:
     def __init__(self):
-        inner_sin = REFLECTOR_INNER_RADIUS * math.sin(math.pi / NUM_REFLECTORS)
-        inner_cos = REFLECTOR_INNER_RADIUS * math.cos(math.pi / NUM_REFLECTORS)
+        inner_x = REFLECTOR_INNER_RADIUS * math.cos(math.pi / NUM_REFLECTORS)
+        inner_y = REFLECTOR_INNER_RADIUS * math.sin(math.pi / NUM_REFLECTORS)
         solid = (
             cq.Workplane("XY")
             .ellipseArc(
@@ -195,10 +257,10 @@ class MirrorSegment:
                 180 / NUM_REFLECTORS,
                 startAtCurrent=False,
             )
-            .lineTo(inner_cos, inner_sin)
-            .lineTo(inner_cos, -inner_sin)
+            .lineTo(inner_x, inner_y)
+            .lineTo(inner_x, -inner_y)
             .close()
-            .extrude(REFLECTOR_HEIGHT)
+            .extrude(FRAME_CEIL_Z)
         )
 
         # 楕円面を彫り込む
@@ -225,25 +287,23 @@ class MirrorSegment:
         solid = solid.cut(cutter)
 
         # LED 取り付け用の溝を掘る
-        x = REFLECTOR_OUTER_RADIUS - 5
-        y = 10
+        y_pos = REFLECTOR_OUTER_RADIUS - 5
+        z = 10
         verts = [
-            (x, -y),
-            (x, y),
-            (x + 10, y + 10),
-            (x + 10, -y - 10),
+            (y_pos, -z),
+            (y_pos, z),
+            (y_pos + 10, z + 10),
+            (y_pos + 10, -z - 10),
         ]
-        cutter = (
-            cq.Workplane("XY").polyline(verts).close().extrude(REFLECTOR_HEIGHT + 10)
-        )
+        cutter = cq.Workplane("XY").polyline(verts).close().extrude(FRAME_CEIL_Z + 10)
         solid = solid.cut(cutter)
 
         # 天井を斜めにする
         verts = [
-            (REFLECTOR_OUTER_RADIUS - REFLECTOR_TOP_CUT_SIZE, REFLECTOR_HEIGHT + 10),
-            (REFLECTOR_OUTER_RADIUS, REFLECTOR_HEIGHT + 10),
-            (REFLECTOR_OUTER_RADIUS, REFLECTOR_HEIGHT - REFLECTOR_TOP_CUT_SIZE),
-            (REFLECTOR_OUTER_RADIUS - REFLECTOR_TOP_CUT_SIZE, REFLECTOR_HEIGHT),
+            (REFLECTOR_OUTER_RADIUS - REFLECTOR_TOP_CUT_SIZE, FRAME_CEIL_Z + 10),
+            (REFLECTOR_OUTER_RADIUS, FRAME_CEIL_Z + 10),
+            (REFLECTOR_OUTER_RADIUS, FRAME_CEIL_Z - REFLECTOR_TOP_CUT_SIZE),
+            (REFLECTOR_OUTER_RADIUS - REFLECTOR_TOP_CUT_SIZE, FRAME_CEIL_Z),
         ]
         cutter = (
             cq.Workplane("XZ")
@@ -273,10 +333,10 @@ class MirrorSegment:
             .workplane(origin=(0, 0, 0))
             .pushPoints(
                 [
-                    (0, REFLECTOR_HEIGHT - ARM_MOUNT_Z_OFFSET),
+                    (0, FRAME_CEIL_Z - ARM_MOUNT_Z_OFFSET),
                     (
                         0,
-                        REFLECTOR_HEIGHT - ARM_MOUNT_Z_OFFSET - ARM_MOUNT_HOLE_DISTANCE,
+                        FRAME_CEIL_Z - ARM_MOUNT_Z_OFFSET - ARM_MOUNT_HOLE_DISTANCE,
                     ),
                 ]
             )
@@ -314,7 +374,130 @@ class MirrorSegment:
         reflector = solid.intersect(intersector)
 
         # フレームを切り出す
-        frame = solid.cut(intersector)
+        frame = solid.cut(intersector.translate((GENERIC_GAP, 0, GENERIC_GAP)))
+
+        outer_x = REFLECTOR_OUTER_RADIUS * math.cos(math.pi / NUM_REFLECTORS)
+        outer_y = REFLECTOR_OUTER_RADIUS * math.sin(math.pi / NUM_REFLECTORS)
+        verts = [
+            (inner_x, -inner_y),
+            (inner_x, inner_y),
+            (outer_x, outer_y),
+            (outer_x, -outer_y),
+        ]
+
+        cutter_outer_x = REFLECTOR_OUTER_RADIUS - REFLECTOR_TOP_CUT_SIZE - 5
+        cutter = cq.Workplane("XY").polyline(verts).close().extrude(FRAME_CEIL_Z + 1)
+        cutter = cutter.cut(
+            cq.Workplane("XY")
+            .box(400, 400, 400, centered=(False, True, False))
+            .translate((REF_INNER_MOUNT_X - 400 + 5, 0, 0))
+        )
+        cutter = cutter.cut(
+            cq.Workplane("XY")
+            .box(400, 400, 400, centered=(False, True, False))
+            .translate((cutter_outer_x, 0, 0))
+        )
+
+        hole_mount = (
+            cq.Workplane("XY")
+            .box(10, 100, FRAME_CEIL_Z, centered=(True, False, False))
+            .translate((REF_OUTER_MOUNT_X, REF_OUTER_MOUNT_Y, 0))
+            .faces(">Z")
+            .workplane(origin=(0, 0, 0))
+            .pushPoints([(REF_OUTER_MOUNT_X, REF_OUTER_MOUNT_Y)])
+            .circle(10 / 2)
+            .extrude(-100)
+        )
+        cutter = cutter.cut(hole_mount)
+        cutter = cutter.cut(hole_mount.mirror("XZ"))
+
+        ellip = (
+            cq.Workplane("XY")
+            .ellipseArc(
+                ELLIPSE_R_LONG + REFLECTOR_THICKNESS + 5,
+                ELLIPSE_R_SHORT + REFLECTOR_THICKNESS + 5,
+                0,
+                180,
+                sense=-1,
+                startAtCurrent=False,
+            )
+            .close()
+            .revolve(360, (0, 0, 0), (1, 0, 0))
+            .translate((ELLIPSE_F_DISTANCE / 2, 0, 0))
+        )
+        ellip = ellip.cut(
+            cq.Workplane("XY")
+            .box(400, 400, 200, centered=(True, True, False))
+            .translate((0, 0, -200 + ELLIPSE_FLOOR_Z + 5))
+        )
+        ellip = ellip.rotate((0, 0, 0), (0, -1, 0), ELLIPSE_ANGLE)
+        ellip = ellip.cut(
+            cq.Workplane("XY")
+            .box(400, 400, 400, centered=(False, True, True))
+            .translate((cutter_outer_x - 400 - 1, 0, 0))
+        )
+        cutter = cutter.union(ellip)
+
+        cutter = cutter.cut(
+            cq.Workplane("XY")
+            .box(400, 400, 400, centered=(False, False, False))
+            .translate((0, -FRAME_THICKNESS, 0))
+            .rotate((0, 0, 0), (0, 0, 1), 180 / NUM_REFLECTORS)
+        )
+        cutter = cutter.cut(
+            cq.Workplane("XY")
+            .box(400, 400, 400, centered=(False, False, False))
+            .translate((0, -400 + FRAME_THICKNESS, 0))
+            .rotate((0, 0, 0), (0, 0, 1), -180 / NUM_REFLECTORS)
+        )
+        cutter = cutter.edges("|Z").edges("<Y or >Y").chamfer(2)
+
+        frame = frame.cut(cutter)
+
+        x = REFLECTOR_OUTER_RADIUS - REFLECTOR_TOP_CUT_SIZE - 5
+        z = FRAME_CEIL_Z - 5
+        verts = [
+            (x, z),
+            (x - 20, z),
+            #(x - 20, z - 5),
+            (x, z - 25),
+        ]
+        cutter = (
+            cq.Workplane("XZ")
+            .polyline(verts)
+            .close()
+            .extrude(REFLECTOR_OUTER_RADIUS, both=True)
+            .edges("|Y")
+            #.edges(">X or >Z")
+            .chamfer(2)
+        )
+        frame = frame.cut(cutter)
+
+        # 通気孔
+        verts = [
+            (0,0),
+            (20,-5),
+            (20,-100),
+            (0,-100),
+        ]
+        hole = (
+            cq.Workplane("YZ")
+            .polyline(verts)
+            .close()
+            .extrude(100)
+            .translate(
+                (
+                    REFLECTOR_OUTER_RADIUS - REFLECTOR_TOP_CUT_SIZE - 10,
+                    FRAME_THICKNESS,
+                    FRAME_CEIL_Z - 15,
+                )
+            )
+            .edges("|X")
+            .chamfer(2)
+            .rotate((0, 0, 0), (0, 0, 1), -180 / NUM_REFLECTORS)
+        )
+        frame = frame.cut(hole)
+        frame = frame.cut(hole.mirror("XZ"))
 
         self.reflector_solid = reflector
         self.frame_solid = frame
@@ -332,7 +515,7 @@ class MirrorFastener:
             .polygon(NUM_REFLECTORS, REFLECTOR_INNER_RADIUS * 2)
             .cutBlind(-50)
             .rotate((0, 0, 0), (0, 0, 1), 180 / NUM_REFLECTORS)
-            .translate((0, 0, REFLECTOR_HEIGHT))
+            .translate((0, 0, FRAME_CEIL_Z))
         )
 
         # 穴開け
@@ -433,7 +616,7 @@ class LedArmBase:
             (
                 REFLECTOR_OUTER_RADIUS - 5,
                 0,
-                REFLECTOR_HEIGHT - ARM_BASE_HEIGHT - ARM_MOUNT_Z_OFFSET + 5,
+                FRAME_CEIL_Z - ARM_BASE_HEIGHT - ARM_MOUNT_Z_OFFSET + 5,
             )
         )
 
@@ -449,11 +632,11 @@ class FocusIndicator:
             0,
         )
         inner_cross = ellipsoid_line_intersection(
-            ELLIPSE_F_NEAR,
-            ELLIPSE_F_FAR,
+            FOCUS_NEAR,
+            FOCUS_FAR,
             ELLIPSE_R_LONG,
             (inner_edge_x, inner_edge_y, 0),
-            (inner_edge_x, inner_edge_y, REFLECTOR_HEIGHT),
+            (inner_edge_x, inner_edge_y, FRAME_CEIL_Z),
         )
         foot_pos1 = max(inner_cross, key=lambda p: p[2])
 
@@ -467,9 +650,9 @@ class FocusIndicator:
         outer_edge_v = (0, 0, 1)
 
         # 反射板の壁の下面の切り取る面
-        plane_rad = -math.radians(ELLIPSE_ANGLE)
-        plane_p1 = rotate3d((0, 0, ELLIPSE_FLOOR_Z), (0, 0, 0), (0, 1, 0), plane_rad)
-        plane_p2 = rotate3d((1, 0, ELLIPSE_FLOOR_Z), (0, 0, 0), (0, 1, 0), plane_rad)
+        plane_rad = math.radians(ELLIPSE_ANGLE)
+        plane_p1 = rotate3d((0, 0, ELLIPSE_FLOOR_Z), (0, 0, 0), (0, -1, 0), plane_rad)
+        plane_p2 = rotate3d((1, 0, ELLIPSE_FLOOR_Z), (0, 0, 0), (0, -1, 0), plane_rad)
         plane_p = plane_p1
         plane_v1 = sub3d(plane_p2, plane_p1)
         plane_v2 = (0, 1, 0)
@@ -486,8 +669,8 @@ class FocusIndicator:
 
         # 楕円体との交点
         intersections = ellipsoid_line_intersection(
-            ELLIPSE_F_NEAR,
-            ELLIPSE_F_FAR,
+            FOCUS_NEAR,
+            FOCUS_FAR,
             ELLIPSE_R_LONG,
             intersector_p1,
             intersector_p2,
@@ -506,8 +689,8 @@ class FocusIndicator:
         foot_pos1_rot = rotate3d(foot_pos1, (0, 0, 0), (0, -1, 0), -sketch_angle_rad)
         foot_pos2_rot = rotate3d(foot_pos2, (0, 0, 0), (0, -1, 0), -sketch_angle_rad)
         foot_pos3_rot = (foot_pos2_rot[0], -foot_pos2_rot[1], foot_pos2_rot[2])
-        near_rot = rotate3d(ELLIPSE_F_NEAR, (0, 0, 0), (0, -1, 0), -sketch_angle_rad)
-        far_rot = rotate3d(ELLIPSE_F_FAR, (0, 0, 0), (0, -1, 0), -sketch_angle_rad)
+        near_rot = rotate3d(FOCUS_NEAR, (0, 0, 0), (0, -1, 0), -sketch_angle_rad)
+        far_rot = rotate3d(FOCUS_FAR, (0, 0, 0), (0, -1, 0), -sketch_angle_rad)
 
         wall_height = 10
         wall_thickness = 2
@@ -628,7 +811,7 @@ mirror_fastener = MirrorFastener()
 led_arm_base = LedArmBase()
 focus_indicator = FocusIndicator(mirror_segment)
 
-preview_offset = 10
+preview_offset = 0
 reflector_solid = mirror_segment.reflector_solid.translate((0, 0, preview_offset))
 frame_solid = mirror_segment.frame_solid.translate((0, 0, preview_offset * 2))
 mirror_cap_solid = mirror_fastener.solid.translate((0, 0, preview_offset * 3))
@@ -642,8 +825,8 @@ show_object(focus_indicator_solid, options={"color": "#84f"})
 
 # 焦点の位置 (参考用)
 focus_marker = cq.Workplane("XY").box(2, 2, 2)
-show_object(focus_marker.translate(ELLIPSE_F_NEAR), options={"color": "#f00"})
-show_object(focus_marker.translate(ELLIPSE_F_FAR), options={"color": "#f00"})
+show_object(focus_marker.translate(FOCUS_NEAR), options={"color": "#f00"})
+show_object(focus_marker.translate(FOCUS_FAR), options={"color": "#f00"})
 
 
 step = mirror_segment.reflector_solid.rotate((0, 0, 0), (0, -1, 0), -ELLIPSE_ANGLE)
