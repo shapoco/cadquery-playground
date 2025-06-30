@@ -2,6 +2,14 @@ import cadquery as cq
 import math
 
 
+def sub2d(a, b):
+    return ((a[0] - b[0]), (a[1] - b[1]))
+
+
+def hypot2d(a):
+    return math.sqrt(a[0] * a[0] + a[1] * a[1])
+
+
 def add3d(a, b):
     return ((a[0] + b[0]), (a[1] + b[1]), (a[2] + b[2]))
 
@@ -179,32 +187,35 @@ def intersection_plane_line(plane_p, plane_v1, plane_v2, line_p, line_v):
 
 SCALING = 1.5
 
-ENABLE_CHAMFER = False
+ENABLE_CHAMFER = True
 
 # 反射板の数
 NUM_REFLECTORS = 6
 
 # 反射板の寸法 [mm]
-REFLECTOR_INNER_RADIUS = 10 * SCALING
+REFLECTOR_INNER_RADIUS = 10
 REFLECTOR_OUTER_RADIUS = 60 * SCALING
 REFLECTOR_TOP_CUT_SIZE = 10 * SCALING
 REFLECTOR_THICKNESS = 3
 
+# 反射板のサポート有無
+REFLECTOR_ENABLE_SUPPORT = True
+
 # 焦点間の距離 [mm]
-ELLIPSE_F_DISTANCE = 40 * SCALING
+FOCUS_DISTANCE = 40 * SCALING
 
 # 楕円の傾き [度]
 ELLIPSE_ANGLE = 45
 
 # 楕円の半径 [mm]
 ELLIPSE_R_SHORT = 40 * SCALING
-ELLIPSE_R_LONG = math.sqrt((ELLIPSE_F_DISTANCE / 2) ** 2 + ELLIPSE_R_SHORT**2)
+ELLIPSE_R_LONG = math.sqrt((FOCUS_DISTANCE / 2) ** 2 + ELLIPSE_R_SHORT**2)
 
-ELLIPSE_FLOOR_Z = -10 * SCALING
+REFLECTOR_FLOOR_Z = -10 * SCALING
 
 # 焦点の座標
 FOCUS_NEAR = rotate3d(
-    (ELLIPSE_F_DISTANCE, 0, 0), (0, 0, 0), (0, -1, 0), math.radians(ELLIPSE_ANGLE)
+    (FOCUS_DISTANCE, 0, 0), (0, 0, 0), (0, -1, 0), math.radians(ELLIPSE_ANGLE)
 )
 FOCUS_FAR = rotate3d((0, 0, 0), (0, 0, 0), (0, -1, 0), math.radians(ELLIPSE_ANGLE))
 
@@ -213,7 +224,7 @@ ellipse_top = find_ellipsoid_extremal_point(
     FOCUS_NEAR, FOCUS_FAR, ELLIPSE_R_LONG, (0, 0, 1)
 )
 FRAME_CEIL_Z = math.ceil(ellipse_top[2] + 10)
-FRAME_THICKNESS = 5
+FRAME_THICKNESS = 3
 
 # 嵌合用の隙間 [mm]
 GENERIC_GAP = 0.5
@@ -221,13 +232,14 @@ GENERIC_GAP = 0.5
 # 面取りのサイズ [mm]
 CHAMFER = 0.5
 
-# 固定用キャップの穴の間隔 [mm]
-REF_INNER_MOUNT_X = 15 * SCALING
-REF_OUTER_MOUNT_X = 30 * SCALING
-REF_OUTER_MOUNT_Y = 10 * SCALING
+# 天井部分の固定用穴の間隔 [mm]
+CEIL_INNER_MOUNT_X = 15
+CEIL_OUTER_MOUNT_X = 30 * SCALING
+CEIL_OUTER_MOUNT_Y = 20
+CEIL_EXTRA_MOUNT_X = REFLECTOR_OUTER_RADIUS - REFLECTOR_TOP_CUT_SIZE - 5
 
 # 固定用キャップの直径 [mm]
-CAP_DIAMETER = (REF_OUTER_MOUNT_X + 12.5 * SCALING) * 2
+CAP_DIAMETER = (CEIL_OUTER_MOUNT_X + 15) * 2
 
 # 固定用キャップの穴の間隔 [mm]
 # CAP_MOUNT_X = 15
@@ -267,7 +279,7 @@ class MirrorSegment:
         cutter = (
             cq.Workplane("XY")
             .box(400, 400, 200, centered=(True, True, False))
-            .translate((0, 0, -200 + ELLIPSE_FLOOR_Z))
+            .translate((0, 0, -200 + REFLECTOR_FLOOR_Z))
         )
         cutter = cutter.union(
             cq.Workplane("XY")
@@ -281,9 +293,9 @@ class MirrorSegment:
             )
             .close()
             .revolve(360, (0, 0, 0), (1, 0, 0))
-            .translate((ELLIPSE_F_DISTANCE / 2, 0, 0))
+            .translate((FOCUS_DISTANCE / 2, 0, 0))
         )
-        cutter = cutter.rotate((0, 1, 0), (0, 0, 0), ELLIPSE_ANGLE)
+        cutter = cutter.rotate((0, 0, 0), (0, -1, 0), ELLIPSE_ANGLE)
         solid = solid.cut(cutter)
 
         # LED 取り付け用の溝を掘る
@@ -321,9 +333,10 @@ class MirrorSegment:
             .workplane(origin=(0, 0, 0))
             .pushPoints(
                 [
-                    (REF_INNER_MOUNT_X, 0),
-                    (REF_OUTER_MOUNT_X, -REF_OUTER_MOUNT_Y),
-                    (REF_OUTER_MOUNT_X, REF_OUTER_MOUNT_Y),
+                    (CEIL_INNER_MOUNT_X, 0),
+                    (CEIL_OUTER_MOUNT_X, -CEIL_OUTER_MOUNT_Y),
+                    (CEIL_OUTER_MOUNT_X, CEIL_OUTER_MOUNT_Y),
+                    (CEIL_EXTRA_MOUNT_X, 0),
                 ]
             )
             .circle(2.5 / 2)
@@ -345,13 +358,13 @@ class MirrorSegment:
         )
 
         # 面取り
-        if ENABLE_CHAMFER:
+        if False and ENABLE_CHAMFER:
             solid = (
                 solid.faces("<X or <<Y[-2] or >>Y[-2] or <<Z[-2]")
                 # .faces("<X or <<Y[-2] or >>Y[-2] or <<Z[-3]")
                 .chamfer(CHAMFER)
-                .edges("%circle")
-                .chamfer(CHAMFER)
+                # .edges("%circle")
+                # .chamfer(CHAMFER)
             )
 
         intersector = (
@@ -366,12 +379,102 @@ class MirrorSegment:
             )
             .close()
             .revolve(360, (0, 0, 0), (1, 0, 0))
-            .translate((ELLIPSE_F_DISTANCE / 2, 0, 0))
-            .rotate((0, 1, 0), (0, 0, 0), ELLIPSE_ANGLE)
+            .translate((FOCUS_DISTANCE / 2, 0, 0))
+            .rotate((0, 0, 0), (0, -1, 0), ELLIPSE_ANGLE)
         )
 
         # 反射板を切り出す
         reflector = solid.intersect(intersector)
+
+        if REFLECTOR_ENABLE_SUPPORT:
+            # 反射板にサポートを付ける
+
+            # サポートを反射面に沿って切り取るための楕円のパラメータ
+            f1 = (-FOCUS_DISTANCE / 2, 0, 0)
+            f2 = (FOCUS_DISTANCE / 2, 0, 0)
+            r_short = ELLIPSE_R_SHORT + REFLECTOR_THICKNESS - 0.1
+            r_long = ELLIPSE_R_LONG + REFLECTOR_THICKNESS - 0.1
+
+            # サポートの取り付け角度
+            angle_deg_list = [0, 20, 40]
+
+            # サポートの高さ
+            height_list = [r_short * 3 / 4, r_short * 2 / 3, r_short / 2]
+
+            for angle_deg, height in zip(angle_deg_list, height_list):
+                angle_rad = math.radians(angle_deg)
+                cos = math.cos(angle_rad)
+                sin = math.sin(angle_rad)
+                top_z = REFLECTOR_FLOOR_Z + height
+
+                # サポートの頂点位置の算出
+                p1 = add3d(f2, (0, 0, top_z))
+                p2 = add3d(p1, (r_short * cos, r_short * sin, 0))
+                intersections = ellipsoid_line_intersection(f1, f2, r_long, p1, p2)
+                top = max(intersections, key=lambda p: p[0])
+
+                # スケッチのため XZ 平面に回転
+                top = rotate3d(top, p1, (0, 0, 1), -angle_rad)
+
+                # サポートのソリッド生成
+                verts = [
+                    (p1[0], REFLECTOR_FLOOR_Z),
+                    (top[0], top_z),
+                    (top[0] + height * 2 / 3, REFLECTOR_FLOOR_Z),
+                ]
+                support = (
+                    cq.Workplane("XZ").polyline(verts).close().extrude(0.25, both=True)
+                )
+
+                # ミシン目を付ける
+                hole_diameter = 2
+                num_holes = int(math.floor(height / (hole_diameter * 2))) - 3
+                for i in range(num_holes):
+                    z = REFLECTOR_FLOOR_Z + (i + 1) * (hole_diameter * 2)
+                    p1 = add3d(f2, (0, 0, z))
+                    p2 = add3d(p1, (r_short * cos, r_short * sin, 0))
+                    intersections = ellipsoid_line_intersection(f1, f2, r_long, p1, p2)
+                    pos = max(intersections, key=lambda p: p[0])
+                    pos = rotate3d(pos, p1, (0, 0, 1), -angle_rad)
+                    support = support.cut(
+                        cq.Workplane("XY")
+                        .box(
+                            hole_diameter,
+                            10,
+                            hole_diameter,
+                            centered=(True, True, True),
+                        )
+                        .translate(pos)
+                    )
+
+                # 取り付け位置に移動
+                support = support.rotate(f2, add3d(f2, (0, 0, 1)), angle_deg).translate(
+                    (FOCUS_DISTANCE / 2, 0, 0)
+                )
+
+                # 楕円面に沿って切り取る
+                support = support.cut(
+                    cq.Workplane("XY")
+                    .ellipseArc(
+                        r_long,
+                        r_short,
+                        0,
+                        180,
+                        sense=-1,
+                        startAtCurrent=False,
+                    )
+                    .close()
+                    .revolve(360, (0, 0, 0), (1, 0, 0))
+                    .translate((FOCUS_DISTANCE / 2, 0, 0))
+                )
+
+                # 反射板の位置に合わせる
+                support = support.rotate((0, 0, 0), (0, -1, 0), ELLIPSE_ANGLE)
+
+                # 左右対称に取り付け
+                reflector = reflector.union(support)
+                if angle_deg != 0:
+                    reflector = reflector.union(support.mirror("XZ"))
 
         # フレームを切り出す
         frame = solid.cut(intersector.translate((GENERIC_GAP, 0, GENERIC_GAP)))
@@ -385,32 +488,69 @@ class MirrorSegment:
             (outer_x, -outer_y),
         ]
 
-        cutter_outer_x = REFLECTOR_OUTER_RADIUS - REFLECTOR_TOP_CUT_SIZE - 5
         cutter = cq.Workplane("XY").polyline(verts).close().extrude(FRAME_CEIL_Z + 1)
         cutter = cutter.cut(
             cq.Workplane("XY")
             .box(400, 400, 400, centered=(False, True, False))
-            .translate((REF_INNER_MOUNT_X - 400 + 5, 0, 0))
+            .translate((CEIL_INNER_MOUNT_X - 400 + 5, 0, 0))
         )
         cutter = cutter.cut(
             cq.Workplane("XY")
             .box(400, 400, 400, centered=(False, True, False))
-            .translate((cutter_outer_x, 0, 0))
+            .translate((CEIL_EXTRA_MOUNT_X, 0, 0))
         )
 
+        # 固定用穴の周辺
         hole_mount = (
             cq.Workplane("XY")
-            .box(10, 100, FRAME_CEIL_Z, centered=(True, False, False))
-            .translate((REF_OUTER_MOUNT_X, REF_OUTER_MOUNT_Y, 0))
+            .box(6, 100, FRAME_CEIL_Z, centered=(True, False, False))
+            .translate((CEIL_OUTER_MOUNT_X, CEIL_OUTER_MOUNT_Y, 0))
             .faces(">Z")
             .workplane(origin=(0, 0, 0))
-            .pushPoints([(REF_OUTER_MOUNT_X, REF_OUTER_MOUNT_Y)])
-            .circle(10 / 2)
+            .pushPoints([(CEIL_OUTER_MOUNT_X, CEIL_OUTER_MOUNT_Y)])
+            .circle(6 / 2)
             .extrude(-100)
         )
         cutter = cutter.cut(hole_mount)
         cutter = cutter.cut(hole_mount.mirror("XZ"))
 
+        # トラス
+        column_height = 5
+        truss = (
+            cq.Workplane("XY")
+            .box(
+                FRAME_THICKNESS,
+                CEIL_OUTER_MOUNT_Y * 2,
+                column_height,
+                centered=(True, True, False),
+            )
+            .translate((CEIL_OUTER_MOUNT_X, 0, FRAME_CEIL_Z - column_height))
+        )
+        p1 = (CEIL_OUTER_MOUNT_X, CEIL_OUTER_MOUNT_Y, FRAME_CEIL_Z - column_height)
+        p2 = (CEIL_EXTRA_MOUNT_X, 0, FRAME_CEIL_Z - column_height)
+        column_angle_deg = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0])) - 90
+        column_length = hypot3d(sub3d(p2, p1))
+        column = (
+            cq.Workplane("XY")
+            .box(
+                FRAME_THICKNESS,
+                column_length,
+                column_height,
+                centered=(True, False, False),
+            )
+            .rotate((0, 0, 0), (0, 0, 1), column_angle_deg)
+            .translate(p1)
+        )
+        truss = truss.union(column)
+        truss = truss.union(column.mirror("XZ"))
+        truss = truss.union(
+            cq.Workplane("XY")
+            .box(10, 10, column_height, centered=(True, True, False))
+            .translate(p2)
+        )
+        cutter = cutter.cut(truss)
+
+        # 反射面とフレームの間に隙間を空ける
         ellip = (
             cq.Workplane("XY")
             .ellipseArc(
@@ -423,21 +563,22 @@ class MirrorSegment:
             )
             .close()
             .revolve(360, (0, 0, 0), (1, 0, 0))
-            .translate((ELLIPSE_F_DISTANCE / 2, 0, 0))
+            .translate((FOCUS_DISTANCE / 2, 0, 0))
         )
         ellip = ellip.cut(
             cq.Workplane("XY")
             .box(400, 400, 200, centered=(True, True, False))
-            .translate((0, 0, -200 + ELLIPSE_FLOOR_Z + 5))
+            .translate((0, 0, -200 + REFLECTOR_FLOOR_Z + 5))
         )
         ellip = ellip.rotate((0, 0, 0), (0, -1, 0), ELLIPSE_ANGLE)
         ellip = ellip.cut(
             cq.Workplane("XY")
             .box(400, 400, 400, centered=(False, True, True))
-            .translate((cutter_outer_x - 400 - 1, 0, 0))
+            .translate((CEIL_EXTRA_MOUNT_X - 400 - 1, 0, 0))
         )
         cutter = cutter.union(ellip)
 
+        # 側面のフレーム部分を残す
         cutter = cutter.cut(
             cq.Workplane("XY")
             .box(400, 400, 400, centered=(False, False, False))
@@ -450,16 +591,18 @@ class MirrorSegment:
             .translate((0, -400 + FRAME_THICKNESS, 0))
             .rotate((0, 0, 0), (0, 0, 1), -180 / NUM_REFLECTORS)
         )
-        cutter = cutter.edges("|Z").edges("<Y or >Y").chamfer(2)
 
+        # フレームの穴部分を削る
+        cutter = cutter.edges("|Z").edges(">Y or <Y").chamfer(2)
         frame = frame.cut(cutter)
 
-        x = REFLECTOR_OUTER_RADIUS - REFLECTOR_TOP_CUT_SIZE - 5
+        # 側面の穴
+        x = CEIL_EXTRA_MOUNT_X
         z = FRAME_CEIL_Z - 5
         verts = [
             (x, z),
             (x - 20, z),
-            #(x - 20, z - 5),
+            (x - 20, z - 5),
             (x, z - 25),
         ]
         cutter = (
@@ -468,17 +611,17 @@ class MirrorSegment:
             .close()
             .extrude(REFLECTOR_OUTER_RADIUS, both=True)
             .edges("|Y")
-            #.edges(">X or >Z")
+            .edges(">X or >Z")
             .chamfer(2)
         )
         frame = frame.cut(cutter)
 
-        # 通気孔
+        # 外周の穴
         verts = [
-            (0,0),
-            (20,-5),
-            (20,-100),
-            (0,-100),
+            (0, 0),
+            (25, -8),
+            (25, -100),
+            (0, -100),
         ]
         hole = (
             cq.Workplane("YZ")
@@ -489,7 +632,7 @@ class MirrorSegment:
                 (
                     REFLECTOR_OUTER_RADIUS - REFLECTOR_TOP_CUT_SIZE - 10,
                     FRAME_THICKNESS,
-                    FRAME_CEIL_Z - 15,
+                    FRAME_CEIL_Z - 10,
                 )
             )
             .edges("|X")
@@ -520,9 +663,9 @@ class MirrorFastener:
 
         # 穴開け
         hole_points_template = [
-            (REF_INNER_MOUNT_X, 0),
-            (REF_OUTER_MOUNT_X, -REF_OUTER_MOUNT_Y),
-            (REF_OUTER_MOUNT_X, REF_OUTER_MOUNT_Y),
+            (CEIL_INNER_MOUNT_X, 0),
+            (CEIL_OUTER_MOUNT_X, -CEIL_OUTER_MOUNT_Y),
+            (CEIL_OUTER_MOUNT_X, CEIL_OUTER_MOUNT_Y),
         ]
         for i in range(NUM_REFLECTORS):
             rad = math.radians(i * (360 / NUM_REFLECTORS))
@@ -543,14 +686,15 @@ class MirrorFastener:
             )
 
         # 面取り
-        solid = (
-            solid.edges("not %circle")
-            .chamfer(CHAMFER)
-            .edges(">Z and %circle")
-            .chamfer(2)
-            .edges("<Z and %circle")
-            .chamfer(CHAMFER)
-        )
+        if ENABLE_CHAMFER:
+            solid = (
+                solid.edges("not %circle")
+                .chamfer(CHAMFER)
+                .edges(">Z and %circle")
+                .chamfer(2)
+                .edges("<Z and %circle")
+                .chamfer(CHAMFER)
+            )
 
         # マウント用の穴開け
         hole_points = [
@@ -565,14 +709,17 @@ class MirrorFastener:
             .pushPoints(hole_points)
             .circle(3.5 / 2)
             .cutBlind(-30)
-            # 面取り
-            .edges(">Z and %circle")
-            .edges(">>Y[-3] or <<Y[-3]")
-            .chamfer(CHAMFER)
-            .edges("<Z and %circle")
-            .edges(">>Y[-3] or <<Y[-3]")
-            .chamfer(2)
         )
+
+        if ENABLE_CHAMFER:
+            solid = (
+                solid.edges(">Z and %circle")
+                .edges(">>Y[-2] or <<Y[-2]")
+                .chamfer(CHAMFER)
+                .edges("<Z and %circle")
+                .edges(">>Y[-2] or <<Y[-2]")
+                .chamfer(2)
+            )
 
         self.solid = solid
 
@@ -600,17 +747,21 @@ class LedArmBase:
             .pushPoints([(0, 5), (0, 15), (0, 25)])
             .circle(3.5 / 2)
             .cutBlind(-50)
-            # 面取り
-            .edges("%circle")
-            .edges("(<X and (>Z or >>Z[-2])) or (>X and <Z)")
-            .chamfer(CHAMFER)
-            .edges("%circle")
-            .edges(">X and (>Z or >>Z[-2]) or (<X and <Z)")
-            .chamfer(2)
-            .edges("not %circle")
-            .edges("<X or >X or <Y or >Y or <Z or >Z")
-            .chamfer(CHAMFER)
         )
+
+        # 面取り
+        if False and ENABLE_CHAMFER:
+            solid = (
+                solid.edges("%circle")
+                .edges("(<X and (>Z or >>Z[-2])) or (>X and <Z)")
+                .chamfer(CHAMFER)
+                .edges("%circle")
+                .edges(">X and (>Z or >>Z[-2]) or (<X and <Z)")
+                .chamfer(2)
+                .edges("not %circle")
+                .edges("<X or >X or <Y or >Y or <Z or >Z")
+                .chamfer(CHAMFER)
+            )
 
         solid = solid.translate(
             (
@@ -651,8 +802,8 @@ class FocusIndicator:
 
         # 反射板の壁の下面の切り取る面
         plane_rad = math.radians(ELLIPSE_ANGLE)
-        plane_p1 = rotate3d((0, 0, ELLIPSE_FLOOR_Z), (0, 0, 0), (0, -1, 0), plane_rad)
-        plane_p2 = rotate3d((1, 0, ELLIPSE_FLOOR_Z), (0, 0, 0), (0, -1, 0), plane_rad)
+        plane_p1 = rotate3d((0, 0, REFLECTOR_FLOOR_Z), (0, 0, 0), (0, -1, 0), plane_rad)
+        plane_p2 = rotate3d((1, 0, REFLECTOR_FLOOR_Z), (0, 0, 0), (0, -1, 0), plane_rad)
         plane_p = plane_p1
         plane_v1 = sub3d(plane_p2, plane_p1)
         plane_v2 = (0, 1, 0)
@@ -811,7 +962,7 @@ mirror_fastener = MirrorFastener()
 led_arm_base = LedArmBase()
 focus_indicator = FocusIndicator(mirror_segment)
 
-preview_offset = 0
+preview_offset = 10
 reflector_solid = mirror_segment.reflector_solid.translate((0, 0, preview_offset))
 frame_solid = mirror_segment.frame_solid.translate((0, 0, preview_offset * 2))
 mirror_cap_solid = mirror_fastener.solid.translate((0, 0, preview_offset * 3))
