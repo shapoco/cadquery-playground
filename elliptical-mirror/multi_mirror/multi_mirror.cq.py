@@ -386,95 +386,93 @@ class MirrorSegment:
         # 反射板を切り出す
         reflector = solid.intersect(intersector)
 
-        if REFLECTOR_ENABLE_SUPPORT:
-            # 反射板にサポートを付ける
+        reflector_support = None
 
-            # サポートを反射面に沿って切り取るための楕円のパラメータ
-            f1 = (-FOCUS_DISTANCE / 2, 0, 0)
-            f2 = (FOCUS_DISTANCE / 2, 0, 0)
-            r_short = ELLIPSE_R_SHORT + REFLECTOR_THICKNESS - 0.1
-            r_long = ELLIPSE_R_LONG + REFLECTOR_THICKNESS - 0.1
+        # サポートを反射面に沿って切り取るための楕円のパラメータ
+        f1 = (-FOCUS_DISTANCE / 2, 0, 0)
+        f2 = (FOCUS_DISTANCE / 2, 0, 0)
+        r_short = ELLIPSE_R_SHORT + REFLECTOR_THICKNESS - 0.1
+        r_long = ELLIPSE_R_LONG + REFLECTOR_THICKNESS - 0.1
 
-            # サポートの取り付け角度
-            angle_deg_list = [0, 20, 40]
+        # サポートの取り付け角度
+        angle_deg_list = [0, 20, 40]
 
-            # サポートの高さ
-            height_list = [r_short * 3 / 4, r_short * 2 / 3, r_short / 2]
+        # サポートの高さ
+        height_list = [r_short * 3 / 4, r_short * 2 / 3, r_short / 2]
 
-            for angle_deg, height in zip(angle_deg_list, height_list):
-                angle_rad = math.radians(angle_deg)
-                cos = math.cos(angle_rad)
-                sin = math.sin(angle_rad)
-                top_z = REFLECTOR_FLOOR_Z + height
+        for angle_deg, height in zip(angle_deg_list, height_list):
+            angle_rad = math.radians(angle_deg)
+            cos = math.cos(angle_rad)
+            sin = math.sin(angle_rad)
+            top_z = REFLECTOR_FLOOR_Z + height
 
-                # サポートの頂点位置の算出
-                p1 = add3d(f2, (0, 0, top_z))
+            # サポートの頂点位置の算出
+            p1 = add3d(f2, (0, 0, top_z))
+            p2 = add3d(p1, (r_short * cos, r_short * sin, 0))
+            intersections = ellipsoid_line_intersection(f1, f2, r_long, p1, p2)
+            top = max(intersections, key=lambda p: p[0])
+
+            # スケッチのため XZ 平面に回転
+            top = rotate3d(top, p1, (0, 0, 1), -angle_rad)
+
+            # サポートのソリッド生成
+            verts = [
+                (p1[0], REFLECTOR_FLOOR_Z),
+                (top[0], top_z),
+                (top[0] + height * 2 / 3, REFLECTOR_FLOOR_Z),
+            ]
+            support = (
+                cq.Workplane("XZ").polyline(verts).close().extrude(0.25, both=True)
+            )
+
+            # ミシン目を付ける
+            hole_diameter = 2
+            num_holes = int(math.floor(height / (hole_diameter * 2))) - 3
+            for i in range(num_holes):
+                z = REFLECTOR_FLOOR_Z + (i + 1) * (hole_diameter * 2)
+                p1 = add3d(f2, (0, 0, z))
                 p2 = add3d(p1, (r_short * cos, r_short * sin, 0))
                 intersections = ellipsoid_line_intersection(f1, f2, r_long, p1, p2)
-                top = max(intersections, key=lambda p: p[0])
-
-                # スケッチのため XZ 平面に回転
-                top = rotate3d(top, p1, (0, 0, 1), -angle_rad)
-
-                # サポートのソリッド生成
-                verts = [
-                    (p1[0], REFLECTOR_FLOOR_Z),
-                    (top[0], top_z),
-                    (top[0] + height * 2 / 3, REFLECTOR_FLOOR_Z),
-                ]
-                support = (
-                    cq.Workplane("XZ").polyline(verts).close().extrude(0.25, both=True)
-                )
-
-                # ミシン目を付ける
-                hole_diameter = 2
-                num_holes = int(math.floor(height / (hole_diameter * 2))) - 3
-                for i in range(num_holes):
-                    z = REFLECTOR_FLOOR_Z + (i + 1) * (hole_diameter * 2)
-                    p1 = add3d(f2, (0, 0, z))
-                    p2 = add3d(p1, (r_short * cos, r_short * sin, 0))
-                    intersections = ellipsoid_line_intersection(f1, f2, r_long, p1, p2)
-                    pos = max(intersections, key=lambda p: p[0])
-                    pos = rotate3d(pos, p1, (0, 0, 1), -angle_rad)
-                    support = support.cut(
-                        cq.Workplane("XY")
-                        .box(
-                            hole_diameter,
-                            10,
-                            hole_diameter,
-                            centered=(True, True, True),
-                        )
-                        .translate(pos)
-                    )
-
-                # 取り付け位置に移動
-                support = support.rotate(f2, add3d(f2, (0, 0, 1)), angle_deg).translate(
-                    (FOCUS_DISTANCE / 2, 0, 0)
-                )
-
-                # 楕円面に沿って切り取る
+                pos = max(intersections, key=lambda p: p[0])
+                pos = rotate3d(pos, p1, (0, 0, 1), -angle_rad)
                 support = support.cut(
                     cq.Workplane("XY")
-                    .ellipseArc(
-                        r_long,
-                        r_short,
-                        0,
-                        180,
-                        sense=-1,
-                        startAtCurrent=False,
-                    )
-                    .close()
-                    .revolve(360, (0, 0, 0), (1, 0, 0))
-                    .translate((FOCUS_DISTANCE / 2, 0, 0))
+                    .box(hole_diameter, 10, hole_diameter)
+                    .translate(pos)
                 )
 
-                # 反射板の位置に合わせる
-                support = support.rotate((0, 0, 0), (0, -1, 0), ELLIPSE_ANGLE)
+            # 取り付け位置に移動
+            support = support.rotate(f2, add3d(f2, (0, 0, 1)), angle_deg).translate(
+                (FOCUS_DISTANCE / 2, 0, 0)
+            )
 
-                # 左右対称に取り付け
-                reflector = reflector.union(support)
-                if angle_deg != 0:
-                    reflector = reflector.union(support.mirror("XZ"))
+            # 楕円面に沿って切り取る
+            support = support.cut(
+                cq.Workplane("XY")
+                .ellipseArc(
+                    r_long,
+                    r_short,
+                    0,
+                    180,
+                    sense=-1,
+                    startAtCurrent=False,
+                )
+                .close()
+                .revolve(360, (0, 0, 0), (1, 0, 0))
+                .translate((FOCUS_DISTANCE / 2, 0, 0))
+            )
+
+            # 反射板の位置に合わせる
+            support = support.rotate((0, 0, 0), (0, -1, 0), ELLIPSE_ANGLE)
+
+            # 左右対称にする
+            if angle_deg != 0:
+                support = support.union(support.mirror("XZ"))
+
+            if reflector_support is None:
+                reflector_support = support
+            else:
+                reflector_support = reflector_support.union(support)
 
         # フレームを切り出す
         frame = solid.cut(intersector.translate((GENERIC_GAP, 0, GENERIC_GAP)))
@@ -643,6 +641,7 @@ class MirrorSegment:
         frame = frame.cut(hole.mirror("XZ"))
 
         self.reflector_solid = reflector
+        self.reflector_support = reflector_support
         self.frame_solid = frame
         self.bounding_solid = solid
 
@@ -964,11 +963,15 @@ focus_indicator = FocusIndicator(mirror_segment)
 
 preview_offset = 10
 reflector_solid = mirror_segment.reflector_solid.translate((0, 0, preview_offset))
+reflector_support_solid = mirror_segment.reflector_support.translate(
+    (0, 0, preview_offset)
+)
 frame_solid = mirror_segment.frame_solid.translate((0, 0, preview_offset * 2))
 mirror_cap_solid = mirror_fastener.solid.translate((0, 0, preview_offset * 3))
 arm_holder_solid = led_arm_base.solid.translate((preview_offset, 0, preview_offset * 2))
 focus_indicator_solid = focus_indicator.solid
 show_object(reflector_solid, options={"color": "#eee"})
+show_object(reflector_support_solid, options={"color": "#0f0"})
 show_object(frame_solid, options={"color": "#888"})
 show_object(mirror_cap_solid, options={"color": "#111"})
 show_object(arm_holder_solid, options={"color": "#111"})
@@ -980,18 +983,27 @@ show_object(focus_marker.translate(FOCUS_NEAR), options={"color": "#f00"})
 show_object(focus_marker.translate(FOCUS_FAR), options={"color": "#f00"})
 
 
-step = mirror_segment.reflector_solid.rotate((0, 0, 0), (0, -1, 0), -ELLIPSE_ANGLE)
-step.export(f"{STEP_OUT_DIR}/mirror_reflector.step")
+mirror_reflector_step = mirror_segment.reflector_solid
+if REFLECTOR_ENABLE_SUPPORT:
+    mirror_reflector_step = mirror_reflector_step.union(
+        mirror_segment.reflector_support
+    )
+mirror_reflector_step = mirror_reflector_step.rotate(
+    (0, 0, 0), (0, -1, 0), -ELLIPSE_ANGLE
+)
 
-step = mirror_segment.frame_solid.rotate((0, 0, 0), (0, -1, 0), 180)
-step.export(f"{STEP_OUT_DIR}/mirror_frame.step")
+mirror_reflector_step.export(f"{STEP_OUT_DIR}/mirror_reflector.step")
 
-mirror_fastener.solid.export(f"{STEP_OUT_DIR}/mirror_fastener.step")
+mirror_frame_step = mirror_segment.frame_solid.rotate((0, 0, 0), (0, -1, 0), 180)
+mirror_frame_step.export(f"{STEP_OUT_DIR}/mirror_frame.step")
 
-step = led_arm_base.solid.rotate((0, 0, 0), (0, 1, 0), -90)
-step.export(f"{STEP_OUT_DIR}/led_arm_base.step")
+mirror_fastener_step = mirror_fastener.solid.rotate((0, 0, 0), (0, 1, 0), -90)
+mirror_fastener_step.export(f"{STEP_OUT_DIR}/mirror_fastener.step")
 
-step = focus_indicator.solid.rotate(
+led_arm_base_step = led_arm_base.solid.rotate((0, 0, 0), (0, 1, 0), -90)
+led_arm_base_step.export(f"{STEP_OUT_DIR}/led_arm_base.step")
+
+focus_indicator_step = focus_indicator.solid.rotate(
     (0, 0, 0), (0, 1, 0), focus_indicator.angle_deg + 90
 )
-step.export(f"{STEP_OUT_DIR}/focus_indicator.step")
+focus_indicator_step.export(f"{STEP_OUT_DIR}/focus_indicator.step")
