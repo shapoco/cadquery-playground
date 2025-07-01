@@ -208,8 +208,8 @@ FOCUS_DISTANCE = 40 * SCALING
 ELLIPSE_ANGLE = 45
 
 # 楕円の半径 [mm]
-ELLIPSE_R_SHORT = 40 * SCALING
-ELLIPSE_R_LONG = math.sqrt((FOCUS_DISTANCE / 2) ** 2 + ELLIPSE_R_SHORT**2)
+ELLIPSE_SHORT_RADIUS = 40 * SCALING
+ELLIPSE_LONG_RADIUS = math.sqrt((FOCUS_DISTANCE / 2) ** 2 + ELLIPSE_SHORT_RADIUS**2)
 
 REFLECTOR_FLOOR_Z = -10 * SCALING
 
@@ -221,7 +221,7 @@ FOCUS_FAR = rotate3d((0, 0, 0), (0, 0, 0), (0, -1, 0), math.radians(ELLIPSE_ANGL
 
 # フレームの天井の高さ
 ellipse_top = find_ellipsoid_extremal_point(
-    FOCUS_NEAR, FOCUS_FAR, ELLIPSE_R_LONG, (0, 0, 1)
+    FOCUS_NEAR, FOCUS_FAR, ELLIPSE_LONG_RADIUS, (0, 0, 1)
 )
 FRAME_CEIL_Z = math.ceil(ellipse_top[2] + 10)
 FRAME_THICKNESS = 3
@@ -284,8 +284,8 @@ class MirrorSegment:
         cutter = cutter.union(
             cq.Workplane("XY")
             .ellipseArc(
-                ELLIPSE_R_LONG,
-                ELLIPSE_R_SHORT,
+                ELLIPSE_LONG_RADIUS,
+                ELLIPSE_SHORT_RADIUS,
                 0,
                 180,
                 sense=-1,
@@ -370,8 +370,8 @@ class MirrorSegment:
         intersector = (
             cq.Workplane("XY")
             .ellipseArc(
-                ELLIPSE_R_LONG + REFLECTOR_THICKNESS,
-                ELLIPSE_R_SHORT + REFLECTOR_THICKNESS,
+                ELLIPSE_LONG_RADIUS + REFLECTOR_THICKNESS,
+                ELLIPSE_SHORT_RADIUS + REFLECTOR_THICKNESS,
                 0,
                 180,
                 sense=-1,
@@ -391,8 +391,8 @@ class MirrorSegment:
         # サポートを反射面に沿って切り取るための楕円のパラメータ
         f1 = (-FOCUS_DISTANCE / 2, 0, 0)
         f2 = (FOCUS_DISTANCE / 2, 0, 0)
-        r_short = ELLIPSE_R_SHORT + REFLECTOR_THICKNESS - 0.1
-        r_long = ELLIPSE_R_LONG + REFLECTOR_THICKNESS - 0.1
+        r_short = ELLIPSE_SHORT_RADIUS + REFLECTOR_THICKNESS - 0.1
+        r_long = ELLIPSE_LONG_RADIUS + REFLECTOR_THICKNESS - 0.1
 
         # サポートの取り付け角度
         angle_deg_list = [0, 20, 40]
@@ -416,13 +416,22 @@ class MirrorSegment:
             top = rotate3d(top, p1, (0, 0, 1), -angle_rad)
 
             # サポートのソリッド生成
+            foot_x = top[0] + height * 2 / 3
+            foot_diameter = 15
             verts = [
                 (p1[0], REFLECTOR_FLOOR_Z),
                 (top[0], top_z),
-                (top[0] + height * 2 / 3, REFLECTOR_FLOOR_Z),
+                (foot_x, REFLECTOR_FLOOR_Z),
             ]
             support = (
                 cq.Workplane("XZ").polyline(verts).close().extrude(0.25, both=True)
+            )
+            support = support.union(
+                cq.Workplane("XY")
+                .pushPoints([(foot_x - foot_diameter / 2, 0)])
+                .circle(foot_diameter / 2)
+                .extrude(1)
+                .translate((0, 0, REFLECTOR_FLOOR_Z))
             )
 
             # ミシン目を付ける
@@ -552,8 +561,8 @@ class MirrorSegment:
         ellip = (
             cq.Workplane("XY")
             .ellipseArc(
-                ELLIPSE_R_LONG + REFLECTOR_THICKNESS + 5,
-                ELLIPSE_R_SHORT + REFLECTOR_THICKNESS + 5,
+                ELLIPSE_LONG_RADIUS + REFLECTOR_THICKNESS + 5,
+                ELLIPSE_SHORT_RADIUS + REFLECTOR_THICKNESS + 5,
                 0,
                 180,
                 sense=-1,
@@ -784,7 +793,7 @@ class FocusIndicator:
         inner_cross = ellipsoid_line_intersection(
             FOCUS_NEAR,
             FOCUS_FAR,
-            ELLIPSE_R_LONG,
+            ELLIPSE_LONG_RADIUS,
             (inner_edge_x, inner_edge_y, 0),
             (inner_edge_x, inner_edge_y, FRAME_CEIL_Z),
         )
@@ -821,7 +830,7 @@ class FocusIndicator:
         intersections = ellipsoid_line_intersection(
             FOCUS_NEAR,
             FOCUS_FAR,
-            ELLIPSE_R_LONG,
+            ELLIPSE_LONG_RADIUS,
             intersector_p1,
             intersector_p2,
         )
@@ -961,37 +970,45 @@ mirror_fastener = MirrorFastener()
 led_arm_base = LedArmBase()
 focus_indicator = FocusIndicator(mirror_segment)
 
-preview_offset = 10
-reflector_solid = mirror_segment.reflector_solid.translate((0, 0, preview_offset))
-reflector_support_solid = mirror_segment.reflector_support.translate(
-    (0, 0, preview_offset)
-)
-frame_solid = mirror_segment.frame_solid.translate((0, 0, preview_offset * 2))
-mirror_cap_solid = mirror_fastener.solid.translate((0, 0, preview_offset * 3))
-arm_holder_solid = led_arm_base.solid.translate((preview_offset, 0, preview_offset * 2))
-focus_indicator_solid = focus_indicator.solid
-show_object(reflector_solid, options={"color": "#eee"})
-show_object(reflector_support_solid, options={"color": "#0f0"})
-show_object(frame_solid, options={"color": "#888"})
-show_object(mirror_cap_solid, options={"color": "#111"})
-show_object(arm_holder_solid, options={"color": "#111"})
-show_object(focus_indicator_solid, options={"color": "#84f"})
-
-# 焦点の位置 (参考用)
-focus_marker = cq.Workplane("XY").box(2, 2, 2)
-show_object(focus_marker.translate(FOCUS_NEAR), options={"color": "#f00"})
-show_object(focus_marker.translate(FOCUS_FAR), options={"color": "#f00"})
-
-
-mirror_reflector_step = mirror_segment.reflector_solid
-if REFLECTOR_ENABLE_SUPPORT:
-    mirror_reflector_step = mirror_reflector_step.union(
-        mirror_segment.reflector_support
+if True:
+    preview_offset = 10
+    mirror_reflector_solid = mirror_segment.reflector_solid.translate(
+        (0, 0, preview_offset)
     )
-mirror_reflector_step = mirror_reflector_step.rotate(
-    (0, 0, 0), (0, -1, 0), -ELLIPSE_ANGLE
-)
+    mirror_support_solid = mirror_segment.reflector_support.translate(
+        (0, 0, preview_offset)
+    )
+    mirror_frame_solid = mirror_segment.frame_solid.translate(
+        (0, 0, preview_offset * 2)
+    )
+    mirror_cap_solid = mirror_fastener.solid.translate((0, 0, preview_offset * 3))
+    arm_holder_solid = led_arm_base.solid.translate(
+        (preview_offset, 0, preview_offset * 2)
+    )
+    focus_indicator_solid = focus_indicator.solid
+    show_object(mirror_reflector_solid, options={"color": "#eee"})
+    show_object(mirror_support_solid, options={"color": "#0f0"})
+    show_object(mirror_frame_solid, options={"color": "#888"})
+    show_object(mirror_cap_solid, options={"color": "#111"})
+    show_object(arm_holder_solid, options={"color": "#111"})
+    show_object(focus_indicator_solid, options={"color": "#84f"})
 
+    # 焦点の位置 (参考用)
+    focus_marker = cq.Workplane("XY").box(2, 2, 2)
+    show_object(focus_marker.translate(FOCUS_NEAR), options={"color": "#f00"})
+    show_object(focus_marker.translate(FOCUS_FAR), options={"color": "#f00"})
+
+
+def displace_reflector(solid):
+    return solid.rotate((0, 0, 0), (0, -1, 0), -ELLIPSE_ANGLE).translate(
+        (-ELLIPSE_LONG_RADIUS, 0, -REFLECTOR_FLOOR_Z)
+    )
+
+
+mirror_reflector_step = displace_reflector(mirror_segment.reflector_solid)
+mirror_support_step = displace_reflector(mirror_segment.reflector_support)
+if REFLECTOR_ENABLE_SUPPORT:
+    mirror_reflector_step = mirror_reflector_step.union(mirror_support_step)
 mirror_reflector_step.export(f"{STEP_OUT_DIR}/mirror_reflector.step")
 
 mirror_frame_step = mirror_segment.frame_solid.rotate((0, 0, 0), (0, -1, 0), 180)
@@ -1007,3 +1024,8 @@ focus_indicator_step = focus_indicator.solid.rotate(
     (0, 0, 0), (0, 1, 0), focus_indicator.angle_deg + 90
 )
 focus_indicator_step.export(f"{STEP_OUT_DIR}/focus_indicator.step")
+
+if False:
+    show_object(mirror_reflector_step, options={"color": "#eee"})
+    if REFLECTOR_ENABLE_SUPPORT:
+        show_object(mirror_support_step, options={"color": "#0f0"})
