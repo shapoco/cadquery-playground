@@ -434,21 +434,22 @@ class MirrorSegment:
                 .translate((0, 0, REFLECTOR_FLOOR_Z))
             )
 
-            # ミシン目を付ける
-            hole_diameter = 2
-            num_holes = int(math.floor(height / (hole_diameter * 2))) - 3
-            for i in range(num_holes):
-                z = REFLECTOR_FLOOR_Z + (i + 1) * (hole_diameter * 2)
-                p1 = add3d(f2, (0, 0, z))
-                p2 = add3d(p1, (r_short * cos, r_short * sin, 0))
-                intersections = ellipsoid_line_intersection(f1, f2, r_long, p1, p2)
-                pos = max(intersections, key=lambda p: p[0])
-                pos = rotate3d(pos, p1, (0, 0, 1), -angle_rad)
-                support = support.cut(
-                    cq.Workplane("XY")
-                    .box(hole_diameter, 10, hole_diameter)
-                    .translate(pos)
-                )
+            if False:
+                # ミシン目を付ける
+                hole_diameter = 2
+                num_holes = int(math.floor(height / (hole_diameter * 2))) - 3
+                for i in range(num_holes):
+                    z = REFLECTOR_FLOOR_Z + (i + 1) * (hole_diameter * 2)
+                    p1 = add3d(f2, (0, 0, z))
+                    p2 = add3d(p1, (r_short * cos, r_short * sin, 0))
+                    intersections = ellipsoid_line_intersection(f1, f2, r_long, p1, p2)
+                    pos = max(intersections, key=lambda p: p[0])
+                    pos = rotate3d(pos, p1, (0, 0, 1), -angle_rad)
+                    support = support.cut(
+                        cq.Workplane("XY")
+                        .box(hole_diameter, 10, hole_diameter)
+                        .translate(pos)
+                    )
 
             # 取り付け位置に移動
             support = support.rotate(f2, add3d(f2, (0, 0, 1)), angle_deg).translate(
