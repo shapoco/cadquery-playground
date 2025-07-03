@@ -253,18 +253,23 @@ ARM_MOUNT_HOLE_DISTANCE = 10
 ARM_BASE_HEIGHT = 20
 ARM_MOUNT_Z_OFFSET = 10 * SCALING
 
-# 関節のシャフトの寸法
-LOCKSHAFT_DIAMETER = 10
-LOCKSHAFT_LENGTH = 10
-LOCKSHAFT_GRIP_GAP = 1
-LOCKSHAFT_GRIP_THICKNESS = 3
-LOCKSHAFT_GRIP_NOTCH_WIDTH = 1
-LOCKSHAFT_NOTCH_HEIGHT = 0.25
-LOCKSHAFT_HOLE_RADIUS_MARGIN = 0.1
-LOCKSHAFT_HOLE_DISTANCE = 5
-LOCKSHAFT_SCREW_DISTANCE = 3
+ARM_JOINT_DISTANCE = 25
+
+ARM_LINK_WIDTH = 12
+ARM_LINK_LENGTH = ARM_JOINT_DISTANCE + ARM_LINK_WIDTH
+ARM_LINK_THICKNESS = 5
+
+# ボールジョイントの寸法
+BALLJOINT_NECK_THICKNESS = 5
+BALLJOINT_NECK_WIDTH = 20
+BALLJOINT_NECK_HEIGHT = 3
+BALLJOINT_BALL_DIAMETER = BALLJOINT_NECK_WIDTH * 1.25
+BALLJOINT_CUT_DIAMETER = 15
+BALLJOINT_HOLE_DIAMETER = 5
 
 M3_TAP_HOLE_DIAMETER = 2.5
+M3_HOLE_DIAMETER = 3 + GENERIC_GAP
+M3_NUT_DIAMETER = 5.5 * 2 / math.sqrt(3) + 0.2
 
 STEP_OUT_DIR = "./step"
 
@@ -703,7 +708,7 @@ class MirrorFastener:
                 solid.faces(">Z")
                 .workplane(origin=(0, 0, 0))
                 .pushPoints(hole_points)
-                .circle(3.5 / 2)
+                .circle(M3_HOLE_DIAMETER / 2)
                 .cutBlind(-30)
             )
 
@@ -729,7 +734,7 @@ class MirrorFastener:
             solid.faces(">Z")
             .workplane(origin=(0, 0, 0))
             .pushPoints(hole_points)
-            .circle(3.5 / 2)
+            .circle(M3_HOLE_DIAMETER / 2)
             .cutBlind(-30)
         )
 
@@ -746,91 +751,27 @@ class MirrorFastener:
         self.solid = solid
 
 
-def create_lock_shaft(is_hole=False, shaft_extension=0):
-    r = LOCKSHAFT_DIAMETER / 2
-    if is_hole:
-        r += LOCKSHAFT_HOLE_RADIUS_MARGIN
-
-    z_notch_lo = LOCKSHAFT_LENGTH / 2 - LOCKSHAFT_GRIP_NOTCH_WIDTH / 2
-    z_notch_hi = LOCKSHAFT_LENGTH / 2 + LOCKSHAFT_GRIP_NOTCH_WIDTH / 2
-
-    verts = [
-        (0, 0),
-        (r, 0),
-        (r, shaft_extension + z_notch_lo - LOCKSHAFT_NOTCH_HEIGHT),
-        (r - LOCKSHAFT_NOTCH_HEIGHT, shaft_extension + z_notch_lo),
-        (r - LOCKSHAFT_NOTCH_HEIGHT, shaft_extension + z_notch_hi),
-        (r, shaft_extension + z_notch_hi + LOCKSHAFT_NOTCH_HEIGHT),
-        (r, shaft_extension + LOCKSHAFT_LENGTH),
-        (0, shaft_extension + LOCKSHAFT_LENGTH),
-    ]
-    shaft = (
-        cq.Workplane("XZ").polyline(verts).close().revolve(360, (0, 0, 0), (0, 1, 0))
-    )
-
-    return shaft
-
-
-def create_lock_shaft_base():
-    # シャフトのベース部分
-    shaft = create_lock_shaft(is_hole=False)
-    shaft = (
-        shaft.faces(">Z")
-        .workplane(origin=(0, 0, 0))
-        .pushPoints([(LOCKSHAFT_GRIP_THICKNESS + LOCKSHAFT_DIAMETER / 2, 0)])
-        .circle(LOCKSHAFT_DIAMETER / 2)
-        .cutBlind(-100)
-    )
-    return shaft
-
-
-GRIP_LENGTH = (
-    LOCKSHAFT_HOLE_DISTANCE + LOCKSHAFT_DIAMETER + LOCKSHAFT_SCREW_DISTANCE + 5
-)
-GRIP_WIDTH = LOCKSHAFT_DIAMETER + LOCKSHAFT_GRIP_THICKNESS * 2
-
-
-def create_grip():
-
-    # シャフトの穴の形状
-    shaft_hole = create_lock_shaft(is_hole=True).translate(
-        (LOCKSHAFT_HOLE_DISTANCE + LOCKSHAFT_DIAMETER / 2, 0, 0)
-    )
-
-    # シャフトのグリップ部分
-    solid = (
+def create_ball_joint():
+    solid = cq.Workplane("XY").sphere(BALLJOINT_BALL_DIAMETER / 2)
+    solid = solid.intersect(
         cq.Workplane("XY")
-        .box(
-            GRIP_LENGTH,
-            GRIP_WIDTH,
-            LOCKSHAFT_LENGTH,
-            centered=(False, True, False),
-        )
-        # シャフト用の穴
-        .cut(shaft_hole)
-        # シャフト用の穴の面取り
-        .edges("%circle and (>Z or <Z)")
-        .chamfer(CHAMFER)
-        # ネジ止め用の穴
-        .faces("<Y")
-        .workplane(origin=(0, 0, 0))
-        .pushPoints([(GRIP_LENGTH - 5, LOCKSHAFT_LENGTH / 2)])
-        .circle(3.5 / 2)
-        .cutBlind(-100)
-        # ネジ止め用の穴のザグリ
-        .edges("%circle and >Y")
-        .chamfer(2)
-        .edges("%circle and <Y")
-        .chamfer(CHAMFER)
+        .cylinder(BALLJOINT_BALL_DIAMETER * 2, BALLJOINT_CUT_DIAMETER / 2)
+        .rotate((0, 0, 0), (1, 0, 0), 90)
     )
-
-    # 切れ込み
     solid = solid.cut(
+        cq.Workplane("XY")
+        .cylinder(BALLJOINT_BALL_DIAMETER * 2, BALLJOINT_HOLE_DIAMETER / 2)
+        .rotate((0, 0, 0), (1, 0, 0), 90)
+    )
+    solid = solid.translate((0, 0, BALLJOINT_NECK_HEIGHT + BALLJOINT_CUT_DIAMETER / 2))
+    solid = solid.union(
         cq.Workplane("XY").box(
-            100, LOCKSHAFT_GRIP_GAP, 100, centered=(False, True, False)
+            BALLJOINT_NECK_THICKNESS,
+            BALLJOINT_NECK_WIDTH,
+            BALLJOINT_NECK_HEIGHT + 5,
+            centered=(True, True, False),
         )
     )
-
     return solid
 
 
@@ -838,27 +779,13 @@ class LedArm:
     def __init__(self):
         # ベース部分
         base_thickness = 5
-        base_width = GRIP_WIDTH
-        base_height = LOCKSHAFT_LENGTH + ARM_MOUNT_HOLE_DISTANCE + 5 * 2
+        
+        joint1_width = 20
+        joint1_height = ARM_MOUNT_HOLE_DISTANCE + 5 * 2 + 10
 
-        # base_cut_size = (base_width - GRIP_WIDTH) / 2
-        # verts = [
-        #    (base_width / 2, base_height),
-        #    (base_width / 2, LOCKSHAFT_LENGTH + base_cut_size),
-        #    (GRIP_WIDTH / 2, LOCKSHAFT_LENGTH),
-        #    (GRIP_WIDTH / 2, 0),
-        #    (-GRIP_WIDTH / 2, 0),
-        #    (-GRIP_WIDTH / 2, LOCKSHAFT_LENGTH),
-        #    (-base_width / 2, LOCKSHAFT_LENGTH + base_cut_size),
-        #    (-base_width / 2, base_height),
-        # ]
-        arm1_solid = (
+        joint1_solid = (
             cq.Workplane("XY")
-            .box(base_thickness, base_width, base_height, centered=(False, True, False))
-            .translate((-base_thickness, 0, 0))
-            # .polyline(verts)
-            # .close()
-            # .extrude(base_thickness)
+            .box(base_thickness, joint1_width, joint1_height, centered=(False, True, False))
             .faces(">X")
             .workplane(origin=(0, 0, 0))
             .pushPoints(
@@ -867,7 +794,7 @@ class LedArm:
                     (0, 5 + ARM_MOUNT_HOLE_DISTANCE),
                 ]
             )
-            .circle(3.5 / 2)
+            .circle(M3_HOLE_DIAMETER / 2)
             .cutBlind(-10)
             # 取り付け穴の皿ネジ用の座繰り
             .edges("%circle and >X")
@@ -875,80 +802,142 @@ class LedArm:
         )
 
         # グリップを生成してくっつける
-        arm1_solid = arm1_solid.union(
-            create_grip().translate((0, 0, ARM_BASE_HEIGHT))
+        joint1_solid = joint1_solid.union(
+            create_ball_joint()
+            .rotate((0, 0, 0), (0, 1, 0), 90)
+            .translate((base_thickness, 0, joint1_height - BALLJOINT_NECK_THICKNESS / 2))
         )
 
         # 全体の面取り
         if ENABLE_CHAMFER:
-            arm1_solid = arm1_solid.edges(
-                "%line and (<X or >X or <Y or >Y or <Z or >Z)"
-            ).chamfer(CHAMFER)
+            joint1_solid = joint1_solid.faces("-X or +Y or -Y or -Z or +Z").chamfer(CHAMFER)
 
-        arm2_floor_thickness = 5
-        arm2_z_offset = ARM_BASE_HEIGHT - 1
-        arm2_x_offset = LOCKSHAFT_HOLE_DISTANCE + LOCKSHAFT_DIAMETER / 2
-        arm2_length = GRIP_WIDTH
-        arm2_width = arm2_floor_thickness + 1 + GRIP_WIDTH
-        arm2_solid = (
+        ARM2_WIDTH = 10
+        HEAT_SINK_HOLE_DISTANCE = 30
+
+        hole_points = [
+            (0, HEAT_SINK_HOLE_DISTANCE / 2),
+            (0, -HEAT_SINK_HOLE_DISTANCE / 2),
+        ]
+
+        joint2_solid = (
             cq.Workplane("XY")
             .box(
-                arm2_length,
-                arm2_width,
-                arm2_floor_thickness,
-                centered=(True, False, False),
+                ARM2_WIDTH,
+                HEAT_SINK_HOLE_DISTANCE,
+                base_thickness,
+                centered=(True, True, False),
             )
-            .translate(
-                (
-                    arm2_x_offset,
-                    -arm2_width / 2,
-                    arm2_z_offset - arm2_floor_thickness,
-                )
-            )
+            # 両端の丸み
+            .pushPoints(hole_points)
+            .circle(ARM2_WIDTH / 2)
+            .extrude(base_thickness)
+            # ヒートシンク取り付け穴
+            .faces(">Z")
+            .workplane(origin=(0, 0, 0))
+            .pushPoints(hole_points)
+            .circle(M3_HOLE_DIAMETER / 2)
+            .cutBlind(-100)
+            # ナット用の凹み
+            .pushPoints(hole_points)
+            .polygon(6, M3_NUT_DIAMETER)
+            .cutBlind(-2.5)
         )
-        arm2_solid = arm2_solid.union(
-            create_grip()
-            .rotate((0, 0, 0), (0, 1, 0), 90)
-            .rotate((0, 0, 0), (0, 0, 1), 90)
-            .translate(
-                (
-                    arm2_x_offset,
-                    -arm2_width / 2,
-                    arm2_z_offset - arm2_floor_thickness,
-                )
+        joint2_solid = joint2_solid.union(
+            create_ball_joint().translate((0, 0, base_thickness))
+        )
+        joint2_solid = joint2_solid.translate(
+            (
+                base_thickness + BALLJOINT_NECK_HEIGHT + BALLJOINT_CUT_DIAMETER / 2,
+                0,
+                joint1_height
+                - ARM_JOINT_DISTANCE
+                - BALLJOINT_CUT_DIAMETER
+                - BALLJOINT_NECK_HEIGHT,
             )
         )
 
-        # シャフト
-        shaft = (
-            create_lock_shaft(shaft_extension=1)
-            .faces("<Z")
+        # 全体の面取り
+        if ENABLE_CHAMFER:
+            joint2_solid = joint2_solid.edges("%line and (<X or >X)").chamfer(CHAMFER)
+
+        link_solid = (
+            cq.Workplane("XY")
+            .box(
+                ARM_LINK_WIDTH,
+                ARM_LINK_THICKNESS,
+                ARM_LINK_LENGTH - ARM_LINK_WIDTH,
+                centered=(True, False, True),
+            )
+            # 両端の丸み
+            .faces(">Y")
+            .workplane(origin=(0, 0, 0))
+            .pushPoints(
+                [
+                    (0, ARM_JOINT_DISTANCE / 2),
+                    (0, -ARM_JOINT_DISTANCE / 2),
+                ]
+            )
+            .circle(ARM_LINK_WIDTH / 2)
+            .extrude(-ARM_LINK_THICKNESS)
+            # 中央の穴
+            .faces(">Y")
             .workplane(origin=(0, 0, 0))
             .pushPoints([(0, 0)])
-            .circle(M3_TAP_HOLE_DIAMETER / 2)
-            .cutBlind(-min(10, LOCKSHAFT_LENGTH - 3))
-            .translate((arm2_x_offset, 0, arm2_z_offset))
+            .circle(M3_HOLE_DIAMETER / 2)
+            .cutBlind(-100)
+        )
+        # ボールジョイントの形に削る
+        cutter = (
+            cq.Workplane("XY")
+            .sphere(BALLJOINT_BALL_DIAMETER / 2)
+            .translate((0, -BALLJOINT_NECK_WIDTH / 2, 0))
+        )
+        cutter = cutter.cut(
+            cq.Workplane("XY").cylinder(100, 1).rotate((0, 0, 0), (1, 0, 0), 90)
+        )
+        cutter = cutter.translate((0, 0, ARM_JOINT_DISTANCE / 2))
+        link_solid = link_solid.cut(cutter).cut(cutter.mirror("XY"))
+
+        # ナット用の壁
+        link_solid = (
+            link_solid.faces("<Y")
+            .workplane(origin=(0, 0, 0))
+            .pushPoints([(0, 0)])
+            .polygon(6, M3_NUT_DIAMETER + 2)
+            .extrude(2)
+            .faces("<Y")
+            .workplane(origin=(0, 0, 0))
+            .pushPoints([(0, 0)])
+            .polygon(6, M3_NUT_DIAMETER)
+            .cutBlind(-2)
+        )
+        
+        link_solid = link_solid.translate(
+            (
+                base_thickness + BALLJOINT_NECK_HEIGHT + BALLJOINT_CUT_DIAMETER / 2,
+                BALLJOINT_NECK_WIDTH / 2,
+                joint1_height - (ARM_JOINT_DISTANCE + BALLJOINT_CUT_DIAMETER) / 2 + 5,
+            )
         )
 
+        # 全体の面取り
         if ENABLE_CHAMFER:
-            arm2_solid = arm2_solid.edges(
-                "%line and (<X or >X or <Y or >Y or <Z or >Z)"
-            ).chamfer(CHAMFER)
-            shaft = shaft.edges(">Z").chamfer(CHAMFER)
-
-        arm2_solid = arm2_solid.union(shaft)
+            link_solid = link_solid.faces("+Y").chamfer(CHAMFER)
 
         # 然るべき位置に移動
         offset = (
-            REFLECTOR_OUTER_RADIUS - 5 + base_thickness,
+            REFLECTOR_OUTER_RADIUS - 5,
             0,
             FRAME_CEIL_Z - ARM_BASE_HEIGHT - ARM_MOUNT_Z_OFFSET + 5,
         )
-        arm1_solid = arm1_solid.translate(offset)
-        arm2_solid = arm2_solid.translate(offset)
+        joint1_solid = joint1_solid.translate(offset)
+        joint2_solid = joint2_solid.translate(offset)
+        link_solid = link_solid.translate(offset)
 
-        self.arm1_solid = arm1_solid
-        self.arm2_solid = arm2_solid
+        self.joint1_solid = joint1_solid
+        self.joint2_solid = joint2_solid
+        self.link_solid = link_solid
 
 
 class FocusIndicator:
@@ -1151,13 +1140,16 @@ if True:
         (0, 0, preview_offset * 2)
     )
     mirror_cap_solid = mirror_fastener.solid.translate((0, 0, preview_offset * 3))
-    #led_arm_shaft_solid = led_arm.shaft2_solid.translate(
+    # led_arm_shaft_solid = led_arm.shaft2_solid.translate(
     #    (preview_offset, 0, preview_offset * 2)
-    #)
-    led_arm1_solid = led_arm.arm1_solid.translate(
+    # )
+    arm_joint1_solid = led_arm.joint1_solid.translate(
         (preview_offset, 0, preview_offset * 2)
     )
-    led_arm2_solid = led_arm.arm2_solid.translate(
+    arm_joint2_solid = led_arm.joint2_solid.translate(
+        (preview_offset, 0, preview_offset * 2)
+    )
+    arm_link_solid = led_arm.link_solid.translate(
         (preview_offset, 0, preview_offset * 2)
     )
     focus_indicator_solid = focus_indicator.solid
@@ -1165,9 +1157,11 @@ if True:
     # show_object(mirror_support_solid, options={"color": "#0f0"})
     show_object(mirror_frame_solid, options={"color": "#888"})
     show_object(mirror_cap_solid, options={"color": "#111"})
-    show_object(led_arm1_solid, options={"color": "#111"})
-    #show_object(led_arm_shaft_solid, options={"color": "#111"})
-    show_object(led_arm2_solid, options={"color": "#111"})
+    show_object(arm_joint1_solid, options={"color": "#111"})
+    # show_object(led_arm_shaft_solid, options={"color": "#111"})
+    show_object(arm_joint2_solid, options={"color": "#111"})
+    show_object(arm_link_solid, options={"color": "#888"})
+    show_object(arm_link_solid.mirror("XZ"), options={"color": "#888"})
     show_object(focus_indicator_solid, options={"color": "#84f"})
 
     # 焦点の位置 (参考用)
@@ -1194,10 +1188,12 @@ mirror_frame_step.export(f"{STEP_OUT_DIR}/mirror_frame.step")
 mirror_fastener_step = mirror_fastener.solid.rotate((0, 0, 0), (0, 1, 0), -90)
 mirror_fastener_step.export(f"{STEP_OUT_DIR}/mirror_fastener.step")
 
-led_arm_grip1_step = led_arm.arm1_solid.rotate((0, 0, 0), (1, 0, 0), 180)
-led_arm_grip1_step.export(f"{STEP_OUT_DIR}/led_arm1.step")
-led_arm_grip2_step = led_arm.arm2_solid.rotate((0, 0, 0), (1, 0, 0), 90)
-led_arm_grip2_step.export(f"{STEP_OUT_DIR}/led_arm2.step")
+arm_joint1_step = led_arm.joint1_solid.rotate((0, 0, 0), (0, -1, 0), 90)
+arm_joint1_step.export(f"{STEP_OUT_DIR}/arm_joint1.step")
+arm_joint2_step = led_arm.joint2_solid
+arm_joint2_step.export(f"{STEP_OUT_DIR}/arm_joint2.step")
+arm_link_step = led_arm.link_solid.rotate((0, 0, 0), (1, 0, 0), -90)
+arm_link_step.export(f"{STEP_OUT_DIR}/arm_link.step")
 
 focus_indicator_step = focus_indicator.solid.rotate(
     (0, 0, 0), (0, 1, 0), focus_indicator.angle_deg + 90
