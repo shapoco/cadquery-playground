@@ -257,7 +257,7 @@ ARM_JOINT_DISTANCE = 25
 
 ARM_LINK_WIDTH = 12
 ARM_LINK_LENGTH = ARM_JOINT_DISTANCE + ARM_LINK_WIDTH
-ARM_LINK_THICKNESS = 5
+ARM_LINK_THICKNESS = 10
 
 # ボールジョイントの寸法
 BALLJOINT_NECK_THICKNESS = 5
@@ -269,7 +269,12 @@ BALLJOINT_HOLE_DIAMETER = 5
 
 M3_TAP_HOLE_DIAMETER = 2.5
 M3_HOLE_DIAMETER = 3 + GENERIC_GAP
+M3_HEAD_DIAMETER = 5.5
+M3_HEAD_THICKNESS = 2.5
 M3_NUT_DIAMETER = 5.5 * 2 / math.sqrt(3) + 0.2
+M3_NUT_THICKNESS = 2.5
+M3_BUTTERFLY_NUT_THICKNESS = 3.5
+M3_WASHER_THICKNESS = 0.5
 
 STEP_OUT_DIR = "./step"
 
@@ -779,13 +784,18 @@ class LedArm:
     def __init__(self):
         # ベース部分
         base_thickness = 5
-        
+
         joint1_width = 20
         joint1_height = ARM_MOUNT_HOLE_DISTANCE + 5 * 2 + 10
 
         joint1_solid = (
             cq.Workplane("XY")
-            .box(base_thickness, joint1_width, joint1_height, centered=(False, True, False))
+            .box(
+                base_thickness,
+                joint1_width,
+                joint1_height,
+                centered=(False, True, False),
+            )
             .faces(">X")
             .workplane(origin=(0, 0, 0))
             .pushPoints(
@@ -805,12 +815,16 @@ class LedArm:
         joint1_solid = joint1_solid.union(
             create_ball_joint()
             .rotate((0, 0, 0), (0, 1, 0), 90)
-            .translate((base_thickness, 0, joint1_height - BALLJOINT_NECK_THICKNESS / 2))
+            .translate(
+                (base_thickness, 0, joint1_height - BALLJOINT_NECK_THICKNESS / 2)
+            )
         )
 
         # 全体の面取り
         if ENABLE_CHAMFER:
-            joint1_solid = joint1_solid.faces("-X or +Y or -Y or -Z or +Z").chamfer(CHAMFER)
+            joint1_solid = joint1_solid.faces("-X or +Y or -Y or -Z or +Z").chamfer(
+                CHAMFER
+            )
 
         ARM2_WIDTH = 10
         HEAT_SINK_HOLE_DISTANCE = 30
@@ -841,7 +855,7 @@ class LedArm:
             # ナット用の凹み
             .pushPoints(hole_points)
             .polygon(6, M3_NUT_DIAMETER)
-            .cutBlind(-2.5)
+            .cutBlind(-M3_NUT_THICKNESS)
         )
         joint2_solid = joint2_solid.union(
             create_ball_joint().translate((0, 0, base_thickness))
@@ -880,6 +894,12 @@ class LedArm:
             )
             .circle(ARM_LINK_WIDTH / 2)
             .extrude(-ARM_LINK_THICKNESS)
+            # ねじ穴部分の構造強化
+            .faces(">Y")
+            .workplane(origin=(0, 0, 0))
+            .pushPoints([(0, 0)])
+            .circle(ARM_LINK_WIDTH / 2 + 2)
+            .extrude(-ARM_LINK_THICKNESS)
             # 中央の穴
             .faces(">Y")
             .workplane(origin=(0, 0, 0))
@@ -899,31 +919,52 @@ class LedArm:
         cutter = cutter.translate((0, 0, ARM_JOINT_DISTANCE / 2))
         link_solid = link_solid.cut(cutter).cut(cutter.mirror("XY"))
 
-        # ナット用の壁
-        link_solid = (
-            link_solid.faces("<Y")
+        left_link_solid = (
+            link_solid
+            # ねじ頭が埋まる穴
+            .faces(">Y")
             .workplane(origin=(0, 0, 0))
             .pushPoints([(0, 0)])
-            .polygon(6, M3_NUT_DIAMETER + 2)
-            .extrude(2)
+            .circle((M3_HEAD_DIAMETER + GENERIC_GAP) / 2)
+            .cutBlind(-M3_BUTTERFLY_NUT_THICKNESS - M3_WASHER_THICKNESS - GENERIC_GAP)
+            # ナットがはまる壁
+            .faces("<Y")
+            .workplane(origin=(0, 0, 0))
+            .pushPoints([(0, 0)])
+            .polygon(6, M3_NUT_DIAMETER + 3)
+            .extrude(M3_NUT_THICKNESS)
             .faces("<Y")
             .workplane(origin=(0, 0, 0))
             .pushPoints([(0, 0)])
             .polygon(6, M3_NUT_DIAMETER)
-            .cutBlind(-2)
+            .cutBlind(-M3_NUT_THICKNESS)
         )
-        
-        link_solid = link_solid.translate(
-            (
-                base_thickness + BALLJOINT_NECK_HEIGHT + BALLJOINT_CUT_DIAMETER / 2,
-                BALLJOINT_NECK_WIDTH / 2,
-                joint1_height - (ARM_JOINT_DISTANCE + BALLJOINT_CUT_DIAMETER) / 2 + 5,
-            )
-        )
+        right_link_solid = link_solid
 
         # 全体の面取り
         if ENABLE_CHAMFER:
-            link_solid = link_solid.faces("+Y").chamfer(CHAMFER)
+            left_link_solid = (
+                left_link_solid.edges("%circle and >>Y")
+                .edges("not (>>Z or <<Z or >>X or <<X)")
+                .chamfer(CHAMFER)
+                .edges(">>Y and (>>Z or <<Z or >>X or <<X)")
+                .chamfer(2)
+            )
+            right_link_solid = (
+                right_link_solid.edges("%circle and >>Y")
+                .edges("not (>>Z or <<Z or >>X or <<X)")
+                .chamfer(CHAMFER)
+                .edges(">>Y and (>>Z or <<Z or >>X or <<X)")
+                .chamfer(2)
+            )
+
+        offset = (
+            base_thickness + BALLJOINT_NECK_HEIGHT + BALLJOINT_CUT_DIAMETER / 2,
+            BALLJOINT_NECK_WIDTH / 2,
+            joint1_height - (ARM_JOINT_DISTANCE + BALLJOINT_CUT_DIAMETER) / 2 + 5,
+        )
+        left_link_solid = left_link_solid.translate(offset)
+        right_link_solid = right_link_solid.translate(offset).mirror("XZ")
 
         # 然るべき位置に移動
         offset = (
@@ -933,11 +974,13 @@ class LedArm:
         )
         joint1_solid = joint1_solid.translate(offset)
         joint2_solid = joint2_solid.translate(offset)
-        link_solid = link_solid.translate(offset)
+        left_link_solid = left_link_solid.translate(offset)
+        right_link_solid = right_link_solid.translate(offset)
 
         self.joint1_solid = joint1_solid
         self.joint2_solid = joint2_solid
-        self.link_solid = link_solid
+        self.left_link_solid = left_link_solid
+        self.right_link_solid = right_link_solid
 
 
 class FocusIndicator:
@@ -1120,13 +1163,123 @@ class FocusIndicator:
         )
 
         self.solid = solid
-        self.angle_deg = sketch_angle_deg
+        self.angle_deg = sketch_angle_deg + 90
+
+
+class FocusTower:
+    def __init__(self):
+        tower_diameter = 50
+        tower_wall_thickness = 2
+
+        x_offset = -tower_diameter / 2
+        floor_thickness = 6
+        floor_length = CEIL_OUTER_MOUNT_X + 5 - x_offset
+        floor_width = (CEIL_OUTER_MOUNT_Y + 5) * 2
+
+        foot_width = 15
+
+        solid = (
+            cq.Workplane("XY")
+            .box(
+                floor_length,
+                floor_width,
+                floor_thickness,
+                centered=(False, True, False),
+            )
+            .translate((x_offset, 0, FRAME_CEIL_Z))
+        )
+
+        # 足
+        foot = (
+            cq.Workplane("XY")
+            .box(
+                60 + 10,
+                foot_width,
+                floor_thickness,
+                centered=(False, True, False),
+            )
+            .translate((-10, 0, FRAME_CEIL_Z))
+        )
+        solid = solid.union(
+            foot.rotate((0, 0, 0), (0, 0, 1), 45).translate(
+                (CEIL_OUTER_MOUNT_X, CEIL_OUTER_MOUNT_Y, 0)
+            )
+        )
+        solid = solid.union(
+            foot.rotate((0, 0, 0), (0, 0, 1), -45).translate(
+                (CEIL_OUTER_MOUNT_X, -CEIL_OUTER_MOUNT_Y, 0)
+            )
+        )
+
+        # 穴開け
+        hole_points = [
+            (CEIL_INNER_MOUNT_X, 0),
+            (CEIL_OUTER_MOUNT_X, -CEIL_OUTER_MOUNT_Y),
+            (CEIL_OUTER_MOUNT_X, CEIL_OUTER_MOUNT_Y),
+        ]
+        solid = (
+            solid.faces(">Z")
+            .workplane(origin=(0, 0, 0))
+            .pushPoints(hole_points)
+            .circle(M3_HOLE_DIAMETER / 2)
+            .cutBlind(-30)
+            .edges(">Z and %circle")
+            .chamfer(2)
+            .edges("<Z and %circle")
+            .chamfer(CHAMFER)
+            .edges("|Z and (not <<X)")
+            .fillet(foot_width / 2 - 0.1)
+            .edges("|Z and <<X")
+            .fillet(floor_width / 2 - 0.1)
+        )
+
+        # タワーの壁
+        r = tower_diameter / 2
+        arrow_revolve_deg = 10
+        wall_revolve_deg = 360 - 90 + arrow_revolve_deg
+        verts = [
+            (r, 0),
+            (r, FRAME_CEIL_Z),
+            (r - tower_wall_thickness, FRAME_CEIL_Z),
+            (r - tower_wall_thickness, 0),
+        ]
+        solid = solid.union(
+            cq.Workplane("YZ")
+            .polyline(verts)
+            .close()
+            .revolve(wall_revolve_deg, (0, 0, 0), (0, 1, 0))
+            .rotate((0, 0, 0), (0, 0, 1), -wall_revolve_deg / 2 + 90)
+        )
+
+        # 矢印
+        arrow_r_space = 5
+        arrow_root_height = (r - arrow_r_space) * 3 // 2
+        arrow_edge_height = 1
+        verts = [
+            (arrow_r_space, 0),
+            (arrow_r_space, arrow_edge_height),
+            (r, arrow_root_height),
+            (r, 0),
+        ]
+        arrow = (
+            cq.Workplane("YZ")
+            .polyline(verts)
+            .close()
+            .revolve(arrow_revolve_deg, (0, 0, 0), (0, 1, 0))
+            .rotate((0, 0, 0), (0, 0, 1), -arrow_revolve_deg / 2 + 45)
+        )
+        for i in range(4):
+            arrow_rotate_deg = i * (360 / 4)
+            solid = solid.union(arrow.rotate((0, 0, 0), (0, 0, 1), arrow_rotate_deg))
+
+        self.solid = solid
 
 
 mirror_segment = MirrorSegment()
 mirror_fastener = MirrorFastener()
 led_arm = LedArm()
 focus_indicator = FocusIndicator(mirror_segment)
+focus_tower = FocusTower()
 
 if True:
     preview_offset = 0
@@ -1149,10 +1302,14 @@ if True:
     arm_joint2_solid = led_arm.joint2_solid.translate(
         (preview_offset, 0, preview_offset * 2)
     )
-    arm_link_solid = led_arm.link_solid.translate(
+    arm_left_link_solid = led_arm.left_link_solid.translate(
+        (preview_offset, 0, preview_offset * 2)
+    )
+    arm_right_link_solid = led_arm.right_link_solid.translate(
         (preview_offset, 0, preview_offset * 2)
     )
     focus_indicator_solid = focus_indicator.solid
+    focus_tower_solid = focus_tower.solid
     show_object(mirror_reflector_solid, options={"color": "#eee"})
     # show_object(mirror_support_solid, options={"color": "#0f0"})
     show_object(mirror_frame_solid, options={"color": "#888"})
@@ -1160,9 +1317,10 @@ if True:
     show_object(arm_joint1_solid, options={"color": "#111"})
     # show_object(led_arm_shaft_solid, options={"color": "#111"})
     show_object(arm_joint2_solid, options={"color": "#111"})
-    show_object(arm_link_solid, options={"color": "#888"})
-    show_object(arm_link_solid.mirror("XZ"), options={"color": "#888"})
+    show_object(arm_left_link_solid, options={"color": "#888"})
+    show_object(arm_right_link_solid, options={"color": "#888"})
     show_object(focus_indicator_solid, options={"color": "#84f"})
+    show_object(focus_tower_solid, options={"color": "#84f"})
 
     # 焦点の位置 (参考用)
     focus_marker = cq.Workplane("XY").box(2, 2, 2)
@@ -1192,13 +1350,18 @@ arm_joint1_step = led_arm.joint1_solid.rotate((0, 0, 0), (0, -1, 0), 90)
 arm_joint1_step.export(f"{STEP_OUT_DIR}/arm_joint1.step")
 arm_joint2_step = led_arm.joint2_solid
 arm_joint2_step.export(f"{STEP_OUT_DIR}/arm_joint2.step")
-arm_link_step = led_arm.link_solid.rotate((0, 0, 0), (1, 0, 0), -90)
-arm_link_step.export(f"{STEP_OUT_DIR}/arm_link.step")
+arm_left_link_step = led_arm.left_link_solid.rotate((0, 0, 0), (1, 0, 0), -90)
+arm_left_link_step.export(f"{STEP_OUT_DIR}/arm_left_link.step")
+arm_right_link_step = led_arm.right_link_solid.rotate((0, 0, 0), (1, 0, 0), 90)
+arm_right_link_step.export(f"{STEP_OUT_DIR}/arm_right_link.step")
 
 focus_indicator_step = focus_indicator.solid.rotate(
-    (0, 0, 0), (0, 1, 0), focus_indicator.angle_deg + 90
+    (0, 0, 0), (0, 1, 0), focus_indicator.angle_deg
 )
 focus_indicator_step.export(f"{STEP_OUT_DIR}/focus_indicator.step")
+
+focus_tower_step = focus_tower.solid.rotate((0, 0, 0), (0, -1, 0), 180)
+focus_tower_step.export(f"{STEP_OUT_DIR}/focus_tower.step")
 
 if False:
     show_object(mirror_reflector_step, options={"color": "#eee"})
