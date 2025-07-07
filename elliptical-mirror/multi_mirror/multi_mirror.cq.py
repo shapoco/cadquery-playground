@@ -1279,7 +1279,7 @@ mirror_segment = MirrorSegment()
 mirror_fastener = MirrorFastener()
 led_arm = LedArm()
 focus_indicator = FocusIndicator(mirror_segment)
-focus_tower = FocusTower()
+# focus_tower = FocusTower()
 
 if True:
     preview_offset = 0
@@ -1309,7 +1309,7 @@ if True:
         (preview_offset, 0, preview_offset * 2)
     )
     focus_indicator_solid = focus_indicator.solid
-    focus_tower_solid = focus_tower.solid
+    # focus_tower_solid = focus_tower.solid
     show_object(mirror_reflector_solid, options={"color": "#eee"})
     # show_object(mirror_support_solid, options={"color": "#0f0"})
     show_object(mirror_frame_solid, options={"color": "#888"})
@@ -1320,7 +1320,7 @@ if True:
     show_object(arm_left_link_solid, options={"color": "#888"})
     show_object(arm_right_link_solid, options={"color": "#888"})
     show_object(focus_indicator_solid, options={"color": "#84f"})
-    show_object(focus_tower_solid, options={"color": "#84f"})
+    # show_object(focus_tower_solid, options={"color": "#84f"})
 
     # 焦点の位置 (参考用)
     focus_marker = cq.Workplane("XY").box(2, 2, 2)
@@ -1360,8 +1360,8 @@ focus_indicator_step = focus_indicator.solid.rotate(
 )
 focus_indicator_step.export(f"{STEP_OUT_DIR}/focus_indicator.step")
 
-focus_tower_step = focus_tower.solid.rotate((0, 0, 0), (0, -1, 0), 180)
-focus_tower_step.export(f"{STEP_OUT_DIR}/focus_tower.step")
+# focus_tower_step = focus_tower.solid.rotate((0, 0, 0), (0, -1, 0), 180)
+# focus_tower_step.export(f"{STEP_OUT_DIR}/focus_tower.step")
 
 if False:
     show_object(mirror_reflector_step, options={"color": "#eee"})
