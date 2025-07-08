@@ -242,10 +242,8 @@ CEIL_EXTRA_MOUNT_X = REFLECTOR_OUTER_RADIUS - REFLECTOR_TOP_CUT_SIZE - 5
 CAP_DIAMETER = (CEIL_OUTER_MOUNT_X + 15) * 2
 
 # 固定用キャップの穴の間隔 [mm]
-# CAP_MOUNT_X = 15
-# CAP_MOUNT_Y = 20
-CAP_MOUNT_X = 20
-CAP_MOUNT_Y = 30
+CAP_MOUNT_DISTANCE_X = 50
+CAP_MOUNT_DISTANCE_Y = 30
 
 # LED アームの取り付け用穴の間隔 [mm]
 ARM_MOUNT_HOLE_DISTANCE = 10
@@ -679,79 +677,190 @@ class MirrorSegment:
         self.bounding_solid = solid
 
 
+class HeadParams:
+    NORMAL = 0
+    DISH = 1
+    CAP = 2
+    NUT = 3
+
+    def __init__(self, type=NORMAL, diameter=0, thickness=0):
+        self.type = type
+        self.diameter = diameter
+        self.thickness = thickness
+
+        if type == HeadParams.DISH:
+            verts = [
+                (0, 0),
+                (diameter / 2, 0),
+                (0, -diameter / 2),
+            ]
+            self.solid = (
+                cq.Workplane("XZ")
+                .polyline(verts)
+                .close()
+                .revolve(360, (0, 0, 0), (0, 1, 0))
+            )
+        elif type == HeadParams.CAP:
+            verts = [
+                (0, 0),
+                (diameter / 2, 0),
+                (diameter / 2, -thickness),
+                (0, -thickness),
+            ]
+            self.solid = (
+                cq.Workplane("XZ")
+                .polyline(verts)
+                .close()
+                .revolve(360, (0, 0, 0), (0, 1, 0))
+            )
+        elif type == HeadParams.NUT:
+            self.solid = (
+                cq.Workplane("XY")
+                .polygon(6, diameter * 2 / math.sqrt(3))
+                .extrude(-thickness)
+            )
+        else:
+            self.solid = None
+
+
+def create_hole_cutter(
+    diameter,
+    length,
+    near: HeadParams = None,
+    far: HeadParams = None,
+):
+    solid = (
+        cq.Workplane("XY")
+        .cylinder(length, diameter / 2, centered=(True, True, False))
+        .translate((0, 0, -length))
+    )
+
+    if near is not None and near.type != HeadParams.NORMAL:
+        solid = solid.union(near.solid)
+
+    if far is not None and far.type != HeadParams.NORMAL:
+        solid = solid.union(
+            far.solid.rotate((0, 0, 0), (1, 0, 0), 180).translate((0, 0, -length))
+        )
+
+    return solid
+
+
+M3_Dish = HeadParams(HeadParams.DISH, diameter=7)
+M3_Nut = HeadParams(HeadParams.NUT, diameter=5.5, thickness=2.5)
+M3_Chamfer = HeadParams(HeadParams.DISH, diameter=M3_HOLE_DIAMETER + CHAMFER * 2)
+
+
 class MirrorFastener:
     def __init__(self):
-        solid = (
+        center = (-1, 0, FRAME_CEIL_Z)
+
+        beam_thickness = 5
+        beam_width_narrow = 10
+        beam_width_wide = 20
+        beam_length = REFLECTOR_OUTER_RADIUS - 10
+
+        hole_points = [
+            (-1, -beam_width_wide / 2),
+            (-1, beam_width_wide / 2),
+            (beam_length - 2, beam_width_narrow / 2),
+            (beam_length, 0),
+            (beam_length - 2, -beam_width_narrow / 2),
+        ]
+        beam_template = (
             cq.Workplane("XY")
-            .polygon(NUM_REFLECTORS, CAP_DIAMETER)
-            .extrude(5)
-            .faces(">Z")
-            .workplane()
-            .polygon(NUM_REFLECTORS, REFLECTOR_INNER_RADIUS * 2)
-            .cutBlind(-50)
-            .rotate((0, 0, 0), (0, 0, 1), 180 / NUM_REFLECTORS)
+            .polyline(hole_points)
+            .close()
+            .extrude(beam_thickness)
             .translate((0, 0, FRAME_CEIL_Z))
         )
 
-        # 穴開け
-        hole_points_template = [
-            (CEIL_INNER_MOUNT_X, 0),
-            (CEIL_OUTER_MOUNT_X, -CEIL_OUTER_MOUNT_Y),
-            (CEIL_OUTER_MOUNT_X, CEIL_OUTER_MOUNT_Y),
-        ]
-        for i in range(NUM_REFLECTORS):
-            rad = math.radians(i * (360 / NUM_REFLECTORS))
-            sin = math.sin(rad)
-            cos = math.cos(rad)
-
-            hole_points = []
-            for j in range(len(hole_points_template)):
-                x, y = hole_points_template[j]
-                hole_points.append((x * cos - y * sin, x * sin + y * cos))
-
-            solid = (
-                solid.faces(">Z")
-                .workplane(origin=(0, 0, 0))
-                .pushPoints(hole_points)
-                .circle(M3_HOLE_DIAMETER / 2)
-                .cutBlind(-30)
-            )
-
-        # 面取り
-        if ENABLE_CHAMFER:
-            solid = (
-                solid.edges("not %circle")
-                .chamfer(CHAMFER)
-                .edges(">Z and %circle")
-                .chamfer(2)
-                .edges("<Z and %circle")
-                .chamfer(CHAMFER)
-            )
-
-        # マウント用の穴開け
         hole_points = [
-            (CAP_MOUNT_X, -CAP_MOUNT_Y),
-            (CAP_MOUNT_X, CAP_MOUNT_Y),
-            (-CAP_MOUNT_X, -CAP_MOUNT_Y),
-            (-CAP_MOUNT_X, CAP_MOUNT_Y),
+            (beam_length - 20, beam_thickness + 0.1),
+            (beam_length + 0.1, beam_thickness + 0.1),
+            (beam_length + 0.1, 2),
         ]
+        beam_template = beam_template.cut(
+            cq.Workplane("XZ")
+            .polyline(hole_points)
+            .close()
+            .extrude(beam_width_narrow, both=True)
+            .translate((0, 0, FRAME_CEIL_Z))
+        )
+
+        beam_template = beam_template.rotate(
+            center, add3d(center, (0, 0, 1)), 180 / NUM_REFLECTORS
+        )
+
+        solid = beam_template
+        for i in range(1, NUM_REFLECTORS):
+            bam_rotated = beam_template.rotate(
+                center, add3d(center, (0, 0, 1)), i * 360 / NUM_REFLECTORS
+            )
+            if solid is None:
+                solid = bam_rotated
+            else:
+                solid = solid.union(bam_rotated)
+
+        # 中心の板と穴
+        d = REFLECTOR_INNER_RADIUS * 2 * math.sqrt(3) / 2
         solid = (
             solid.faces(">Z")
             .workplane(origin=(0, 0, 0))
-            .pushPoints(hole_points)
-            .circle(M3_HOLE_DIAMETER / 2)
-            .cutBlind(-30)
+            .pushPoints([(0, 0)])
+            .polygon(NUM_REFLECTORS, d + 15 * 2, circumscribed=True)
+            .extrude(-beam_thickness)
+            .faces(">Z")
+            .workplane(origin=(0, 0, 0))
+            .pushPoints([(0, 0)])
+            .polygon(NUM_REFLECTORS, d, circumscribed=True)
+            .cutBlind(-100)
         )
 
-        if ENABLE_CHAMFER:
-            solid = (
-                solid.edges(">Z and %circle")
-                .edges(">>Y[-2] or <<Y[-2]")
-                .chamfer(CHAMFER)
-                .edges("<Z and %circle")
-                .edges(">>Y[-2] or <<Y[-2]")
-                .chamfer(2)
-            )
+        # ねじ穴のテンプレート
+        hole_cutter = create_hole_cutter(
+            M3_HOLE_DIAMETER,
+            length=beam_thickness,
+            near=M3_Dish,
+            far=M3_Chamfer,
+        )
+
+        # 反射板用のネジ穴開け
+        hole_points = [
+            (CEIL_INNER_MOUNT_X, 0, FRAME_CEIL_Z + beam_thickness),
+            (CEIL_OUTER_MOUNT_X, -CEIL_OUTER_MOUNT_Y, FRAME_CEIL_Z + beam_thickness),
+            (CEIL_OUTER_MOUNT_X, CEIL_OUTER_MOUNT_Y, FRAME_CEIL_Z + beam_thickness),
+        ]
+        for i in range(NUM_REFLECTORS):
+            for p in hole_points:
+                p_rotated = rotate3d(
+                    p, center, (0, 0, 1), math.radians(i * 360 / NUM_REFLECTORS)
+                )
+                solid = solid.union(
+                    cq.Workplane("XY")
+                    .cylinder(beam_thickness, 5, centered=(True, True, False))
+                    .translate(p_rotated)
+                    .translate((0, 0, -beam_thickness))
+                )
+                solid = solid.cut(hole_cutter.translate(p_rotated))
+
+        # ねじ穴のテンプレート
+        hole_cutter = create_hole_cutter(
+            M3_HOLE_DIAMETER,
+            length=beam_thickness,
+            near=M3_Dish,
+            far=M3_Chamfer,
+        ).rotate((0, 0, 0), (1, 0, 0), 180)
+
+        # マウント用の穴開け
+        hole_points = [
+            add3d(center, (CAP_MOUNT_DISTANCE_X / 2, -CAP_MOUNT_DISTANCE_Y / 2, 0)),
+            add3d(center, (CAP_MOUNT_DISTANCE_X / 2, CAP_MOUNT_DISTANCE_Y / 2, 0)),
+            add3d(center, (-CAP_MOUNT_DISTANCE_X / 2, CAP_MOUNT_DISTANCE_Y / 2, 0)),
+            add3d(center, (-CAP_MOUNT_DISTANCE_X / 2, -CAP_MOUNT_DISTANCE_Y / 2, 0)),
+        ]
+        for p in hole_points:
+            solid = solid.cut(hole_cutter.translate(p))
 
         self.solid = solid
 
@@ -1275,9 +1384,16 @@ class FocusTower:
         self.solid = solid
 
 
+print("Generating mirror reflector segment...")
 mirror_segment = MirrorSegment()
+
+print("Generating mirror fastener...")
 mirror_fastener = MirrorFastener()
+
+print("Generating LED arm...")
 led_arm = LedArm()
+
+print("Generating focus indicator...")
 focus_indicator = FocusIndicator(mirror_segment)
 # focus_tower = FocusTower()
 
@@ -1343,7 +1459,7 @@ mirror_reflector_step.export(f"{STEP_OUT_DIR}/mirror_reflector.step")
 mirror_frame_step = mirror_segment.frame_solid.rotate((0, 0, 0), (0, -1, 0), 180)
 mirror_frame_step.export(f"{STEP_OUT_DIR}/mirror_frame.step")
 
-mirror_fastener_step = mirror_fastener.solid.rotate((0, 0, 0), (0, 1, 0), -90)
+mirror_fastener_step = mirror_fastener.solid
 mirror_fastener_step.export(f"{STEP_OUT_DIR}/mirror_fastener.step")
 
 arm_joint1_step = led_arm.joint1_solid.rotate((0, 0, 0), (0, -1, 0), 90)
