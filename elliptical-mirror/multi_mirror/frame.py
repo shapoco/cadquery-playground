@@ -3,6 +3,7 @@ import math
 
 # 嵌合用の隙間 [mm]
 GENERIC_GAP = 0.5
+SHAFT_GAP = 0.2
 
 # 面取りのサイズ [mm]
 CHAMFER = 0.5
@@ -13,6 +14,9 @@ CAP_MOUNT_DISTANCE_Y = 30
 
 M3_TAP_HOLE_DIAMETER = 2.5
 M3_HOLE_DIAMETER = 3 + GENERIC_GAP
+
+M6_NUT_DIAMETER = 10
+M6_NUT_THICKNESS = 5
 
 BRIDGE_HEIGHT = 40
 
@@ -208,23 +212,24 @@ bridge_sub_solid = (
     .chamfer(CHAMFER)
 )
 
-GUIDE_POLE_DIAMETER = 4
+GUIDE_SHAFT_DIAMETER = 4
 SCREW_DIAMETER = 6
 
 TSUMAMI_DIAMETER = 20
 TSUMAMI_HEIGHT = 20
 
-ELEVATOR_BASE_THICKNESS = 5
+SHAFT_GRIP_BASE_THICKNESS = 4
+SHAFT_GRIP_SHAFT_OFFSET = 10
 SCREW_GUIDE_WIDTH = 20
 SCREW_GUIDE_THICKNESS = 12
-SCREW_GUIDE_HEIGHT = BRIDGE_HEIGHT - TSUMAMI_HEIGHT
+SCREW_GUIDE_HEIGHT = 10
 
 elevator_grip_solid = (
     cq.Workplane("YZ")
     .box(
         CAP_MOUNT_DISTANCE_Y + 20,
         BRIDGE_HEIGHT,
-        ELEVATOR_BASE_THICKNESS,
+        SHAFT_GRIP_BASE_THICKNESS,
         centered=(True, False, False),
     )
     .faces(">X")
@@ -242,7 +247,7 @@ elevator_grip_solid = (
     elevator_grip_solid.faces(">X")
     .workplane(origin=(0, 0, 0))
     .pushPoints(hole_points)
-    .circle(M3_TAP_HOLE_DIAMETER / 2)
+    .circle(M3_HOLE_DIAMETER / 2)
     .cutBlind(-100)
     .faces(">X")
     .edges("%circle")
@@ -254,8 +259,9 @@ elevator_grip_solid = (
     .chamfer(1)
 )
 
+hole_x = SHAFT_GRIP_SHAFT_OFFSET - SHAFT_GRIP_BASE_THICKNESS
 screw_guide = cq.Workplane("XY").box(
-    5,
+    hole_x,
     SCREW_GUIDE_WIDTH,
     SCREW_GUIDE_HEIGHT,
     centered=(False, True, False),
@@ -263,7 +269,7 @@ screw_guide = cq.Workplane("XY").box(
 screw_guide = screw_guide.union(
     cq.Workplane("XY")
     .cylinder(SCREW_GUIDE_HEIGHT, SCREW_GUIDE_WIDTH / 2, centered=(True, True, False))
-    .translate((5, 0, 0))
+    .translate((hole_x, 0, 0))
 )
 screw_guide = screw_guide.cut(
     cq.Workplane("XY")
@@ -273,30 +279,33 @@ screw_guide = screw_guide.cut(
 screw_guide = (
     screw_guide.faces("<Z")
     .workplane(origin=(0, 0, 0))
-    .pushPoints([(5, 0)])
-    .circle((SCREW_DIAMETER + GENERIC_GAP) / 2)
+    .pushPoints([(hole_x, 0)])
+    .circle((SCREW_DIAMETER + SHAFT_GAP) / 2)
     .cutBlind(-100)
     .edges("%circle or >>X")
     .fillet(CHAMFER)
-    .translate((ELEVATOR_BASE_THICKNESS, 0, BRIDGE_HEIGHT - SCREW_GUIDE_HEIGHT))
+    .translate((SHAFT_GRIP_BASE_THICKNESS, 0, TSUMAMI_HEIGHT))
 )
 
 elevator_grip_solid = elevator_grip_solid.union(screw_guide)
 
-pole_guide = cq.Workplane("XY").box(
-    5,
+hole_x = SHAFT_GRIP_SHAFT_OFFSET - SHAFT_GRIP_BASE_THICKNESS
+shaft_guide = cq.Workplane("XY").box(
+    hole_x,
     10,
     BRIDGE_HEIGHT - 20,
     centered=(False, True, False),
 )
-pole_guide = pole_guide.union(
-    cq.Workplane("XY").cylinder(BRIDGE_HEIGHT - 20, 5, centered=(False, True, False))
+shaft_guide = shaft_guide.union(
+    cq.Workplane("XY")
+    .cylinder(BRIDGE_HEIGHT - 20, 5, centered=(True, True, False))
+    .translate((hole_x, 0, 0))
 )
-pole_guide = (
-    pole_guide.faces(">Z")
+shaft_guide = (
+    shaft_guide.faces(">Z")
     .workplane(origin=(0, 0, 0))
-    .pushPoints([(5, 0)])
-    .circle((GUIDE_POLE_DIAMETER + GENERIC_GAP) / 2)
+    .pushPoints([(hole_x, 0)])
+    .circle((GUIDE_SHAFT_DIAMETER + SHAFT_GAP) / 2)
     .cutBlind(-100)
     .edges("%circle")
     .chamfer(CHAMFER)
@@ -309,22 +318,299 @@ pole_guide = (
 #     .rotate((0, 0, 0), (0, 0, 1), -cut_angle_deg / 2)
 #     .translate((ELEVATOR_BASE_THICKNESS, 0, 0))
 # )
-pole_guide = pole_guide.translate(
-    (ELEVATOR_BASE_THICKNESS, CAP_MOUNT_DISTANCE_Y / 2 + 5, 10)
+shaft_guide = shaft_guide.translate(
+    (SHAFT_GRIP_BASE_THICKNESS, CAP_MOUNT_DISTANCE_Y / 2 + 5, 10)
 )
-elevator_grip_solid = elevator_grip_solid.union(pole_guide)
-elevator_grip_solid = elevator_grip_solid.union(pole_guide.mirror("XZ"))
+elevator_grip_solid = elevator_grip_solid.union(shaft_guide)
+elevator_grip_solid = elevator_grip_solid.union(shaft_guide.mirror("XZ"))
+
+# --------
+
+BASE_FLOOR_LENGTH = 25
+BASE_FLOOR_THICKNESS = 5
+base_solid = cq.Workplane("XY").box(
+    BASE_FLOOR_LENGTH,
+    CAP_MOUNT_DISTANCE_X,
+    BASE_FLOOR_THICKNESS,
+    centered=(False, True, False),
+)
+elevator_mount_hole_points = [
+    (20, -15),
+    (20, 15),
+]
+base_solid = (
+    base_solid.faces(">Z")
+    .workplane(origin=(0, 0, 0))
+    .pushPoints(elevator_mount_hole_points)
+    .circle(M3_HOLE_DIAMETER / 2)
+    .cutBlind(-100)
+    .faces(">Z")
+    .edges("%circle")
+    .chamfer(2)
+    .faces("<Z")
+    .edges("%circle")
+    .chamfer(CHAMFER)
+    .edges("|Z")
+    .chamfer(1)
+)
+
+shaft_guide = (
+    cq.Workplane("XY")
+    .cylinder(5, 5, centered=(True, True, False))
+    .faces(">Z")
+    .workplane(origin=(0, 0, 0))
+    .pushPoints([(0, 0)])
+    .circle((GUIDE_SHAFT_DIAMETER + SHAFT_GAP) / 2)
+    .cutBlind(-100)
+    .translate(
+        (
+            SHAFT_GRIP_SHAFT_OFFSET,
+            CAP_MOUNT_DISTANCE_X / 2 - 5,
+            BASE_FLOOR_THICKNESS,
+        )
+    )
+)
+base_solid = base_solid.union(shaft_guide)
+base_solid = base_solid.union(shaft_guide.mirror("XZ"))
+screw_guide = (
+    cq.Workplane("XY")
+    .cylinder(5, 10, centered=(True, True, False))
+    .translate((SHAFT_GRIP_SHAFT_OFFSET, 0, BASE_FLOOR_THICKNESS))
+)
+base_solid = base_solid.union(screw_guide)
+base_solid = (
+    base_solid.faces(">Z")
+    .workplane(origin=(0, 0, 0))
+    .pushPoints([(SHAFT_GRIP_SHAFT_OFFSET, 0)])
+    .circle((SCREW_DIAMETER + SHAFT_GAP) / 2)
+    .cutBlind(-100)
+    .faces("<Z")
+    .workplane(origin=(0, 0, 0))
+    .pushPoints([(SHAFT_GRIP_SHAFT_OFFSET, 0)])
+    .polygon(6, M6_NUT_DIAMETER * 2 / math.sqrt(3) + GENERIC_GAP)
+    .cutBlind(-M6_NUT_THICKNESS - GENERIC_GAP)
+    .edges(">>Z")
+    .chamfer(CHAMFER)
+)
+
+# --------
+
+cap_solid = cq.Workplane("XY").box(
+    10, CAP_MOUNT_DISTANCE_X - 10, 10, centered=(True, True, False)
+)
+cap_solid = cap_solid.union(
+    cq.Workplane("XY")
+    .cylinder(10, 5, centered=(True, True, False))
+    .translate((0, (CAP_MOUNT_DISTANCE_X - 10) / 2, 0))
+)
+cap_solid = cap_solid.union(
+    cq.Workplane("XY")
+    .cylinder(10, 5, centered=(True, True, False))
+    .translate((0, -(CAP_MOUNT_DISTANCE_X - 10) / 2, 0))
+)
+cap_solid = (
+    cap_solid.faces("<Z")
+    .workplane(origin=(0, 0, 0))
+    .pushPoints(
+        [
+            (0, (CAP_MOUNT_DISTANCE_X - 10) / 2),
+            (0, -(CAP_MOUNT_DISTANCE_X - 10) / 2),
+        ]
+    )
+    .circle((GUIDE_SHAFT_DIAMETER + SHAFT_GAP) / 2)
+    .cutBlind(-5)
+    .pushPoints([(0, 0)])
+    .circle((SCREW_DIAMETER + SHAFT_GAP) / 2)
+    .cutBlind(-100)
+)
+verts = [
+    (-15, 10),
+    (15, 10),
+    (10, 5),
+    (-10, 5),
+]
+cap_solid = (
+    cap_solid.faces(">X")
+    .workplane(origin=(0, 0, 0))
+    .polyline(verts)
+    .close()
+    .cutBlind(-99)
+    .edges()
+    .chamfer(CHAMFER)
+)
+cap_solid = cap_solid.translate((SHAFT_GRIP_SHAFT_OFFSET, 0, 0))
+
+# --------
+
+tsumami_num_verts = 48
+verts = []
+for i in range(tsumami_num_verts):
+    r = TSUMAMI_DIAMETER / 2
+    if i % 2 == 0:
+        r -= 0.5
+    angle = i * (360 / tsumami_num_verts)
+    rad = math.radians(angle)
+    x = r * math.cos(rad)
+    y = r * math.sin(rad)
+    verts.append((x, y))
+tsumami_solid = (
+    cq.Workplane("XY")
+    .polyline(verts)
+    .close()
+    .extrude(TSUMAMI_HEIGHT - 1)
+    .edges(">>Z or <<Z")
+    .chamfer(CHAMFER)
+)
+tsumami_solid = tsumami_solid.union(
+    cq.Workplane("XY")
+    .cylinder(1, SCREW_DIAMETER / 2 + 5, centered=(True, True, False))
+    .translate((0, 0, TSUMAMI_HEIGHT - 1))
+)
+tsumami_solid = (
+    tsumami_solid.faces(">Z")
+    .workplane(origin=(0, 0, 0))
+    .pushPoints([(0, 0)])
+    .circle((SCREW_DIAMETER + SHAFT_GAP) / 2)
+    .cutBlind(-100)
+    .faces("<Z")
+    .workplane(origin=(0, 0, 0))
+    .polygon(6, M6_NUT_DIAMETER * 2 / math.sqrt(3) + GENERIC_GAP)
+    .cutBlind(-M6_NUT_THICKNESS)
+    .edges("%circle and >>Z")
+    .chamfer(CHAMFER)
+)
+tsumami_solid = tsumami_solid.translate((SHAFT_GRIP_SHAFT_OFFSET, 0, 0))
+
+
+# --------
+
+TOWER_BEAM_THICKNESS = 5
+TOWER_CEIL_THICKNESS = 10
+TOWER_HEIGHT = 100
+TOWER_WIDTH = CAP_MOUNT_DISTANCE_X
+
+tower_solid = (
+    cq.Workplane("XY")
+    .box(
+        BASE_FLOOR_LENGTH,
+        TOWER_WIDTH,
+        TOWER_CEIL_THICKNESS,
+        centered=(False, True, False),
+    )
+    .faces(">Z")
+    .workplane(origin=(0, 0, 0))
+    .pushPoints(elevator_mount_hole_points)
+    .circle(M3_TAP_HOLE_DIAMETER / 2)
+    .cutBlind(-7.5)
+    .faces(">Z")
+    .edges("%circle")
+    .chamfer(CHAMFER)
+    .translate((0, 0, TOWER_HEIGHT - TOWER_CEIL_THICKNESS))
+)
+
+pillar = (
+    cq.Workplane("XY")
+    .box(
+        BASE_FLOOR_LENGTH,
+        TOWER_BEAM_THICKNESS,
+        TOWER_HEIGHT,
+        centered=(False, False, False),
+    )
+    .translate((0, TOWER_WIDTH / 2 - TOWER_BEAM_THICKNESS, 0))
+)
+tower_solid = tower_solid.union(pillar)
+tower_solid = tower_solid.union(pillar.mirror("XZ"))
+
+tower_solid = tower_solid.edges(">Y or <Y or >Z").chamfer(CHAMFER)
+
+sujikai_height = (TOWER_HEIGHT - TOWER_CEIL_THICKNESS - TOWER_BEAM_THICKNESS) / 2
+sujikai_width = TOWER_WIDTH - TOWER_BEAM_THICKNESS * 2
+sujikai_thickness = 5
+verts = [
+    (-sujikai_width / 2, -sujikai_thickness / 2),
+    (-sujikai_width / 2, sujikai_thickness / 2),
+    (sujikai_width / 2, sujikai_height + sujikai_thickness / 2),
+    (sujikai_width / 2, sujikai_height - sujikai_thickness / 2),
+]
+sujikai = cq.Workplane("YZ").polyline(verts).close().extrude(BASE_FLOOR_LENGTH)
+sujikai = sujikai.union(sujikai.mirror("XZ"))
+sujikai = sujikai.union(sujikai.mirror("XY"))
+sujikai = sujikai.translate((0, 0, TOWER_BEAM_THICKNESS + sujikai_height))
+tower_solid = tower_solid.union(sujikai)
+
+hole_points = [
+    (5, -(TOWER_WIDTH / 2 + 10)),
+    (5, (TOWER_WIDTH / 2 + 10)),
+    (BASE_FLOOR_LENGTH - 5, -(TOWER_WIDTH / 2 + 10)),
+    (BASE_FLOOR_LENGTH - 5, (TOWER_WIDTH / 2 + 10)),
+]
+floor = (
+    cq.Workplane("XY")
+    .box(
+        BASE_FLOOR_LENGTH,
+        TOWER_WIDTH + 15 * 2,
+        TOWER_BEAM_THICKNESS,
+        centered=(False, True, False),
+    )
+    .faces(">Z")
+    .workplane(origin=(0, 0, 0))
+    .pushPoints(hole_points)
+    .circle(M3_HOLE_DIAMETER / 2)
+    .cutBlind(-7.5)
+    .faces(">Z")
+    .edges("%circle")
+    .chamfer(2)
+    .faces("<Z")
+    .edges("%circle")
+    .chamfer(CHAMFER)
+    .edges("|Z")
+    .chamfer(2)
+    .edges("%line and >Z")
+    .chamfer(CHAMFER)
+)
+tower_solid = tower_solid.union(floor)
+
+# --------
+
+preview_offset = 5
 
 bridge_moved = bridge_main_solid.translate((0, CAP_MOUNT_DISTANCE_X / 2 - 5, 0))
 show_object(bridge_moved, options={"color": "#888"})
-show_object(bridge_moved.mirror("XZ"), name="mirror", options={"color": "#888"})
+show_object(bridge_moved.mirror("XZ"), options={"color": "#888"})
 
 for p in sub_beam_hole_points:
     show_object(bridge_sub_solid.translate((p[0], 0, p[1])), options={"color": "#111"})
 
-elevator_grip_moved = elevator_grip_solid.translate((BEAM_LENGTH / 2, 0, 0))
+elevator_grip_moved = elevator_grip_solid.translate(
+    (BEAM_LENGTH / 2 + preview_offset, 0, 0)
+)
 show_object(elevator_grip_moved, options={"color": "#111"})
 show_object(elevator_grip_moved.mirror("YZ"), options={"color": "#111"})
+
+base_moved = base_solid.translate(
+    (BEAM_LENGTH / 2 + preview_offset, 0, -preview_offset * 4)
+)
+show_object(base_moved, options={"color": "#111"})
+show_object(base_moved.mirror("YZ"), options={"color": "#111"})
+
+cap_moved = cap_solid.translate(
+    (BEAM_LENGTH / 2 + preview_offset, 0, BRIDGE_HEIGHT - 10 + preview_offset)
+)
+show_object(cap_moved, options={"color": "#111"})
+show_object(cap_moved.mirror("YZ"), options={"color": "#111"})
+
+tsumami_moved = tsumami_solid.translate(
+    (BEAM_LENGTH / 2 + preview_offset, 0, -preview_offset)
+)
+show_object(tsumami_moved, options={"color": "#888"})
+show_object(tsumami_moved.mirror("YZ"), options={"color": "#888"})
+
+tower_moved = tower_solid.translate(
+    (BEAM_LENGTH / 2 + preview_offset, 0, -TOWER_HEIGHT - preview_offset * 5)
+)
+show_object(tower_moved, options={"color": "#888"})
+
+# --------
 
 bridge_main_step = bridge_main_solid.rotate((0, 0, 0), (1, 0, 0), 90)
 bridge_main_step.export(f"{STEP_OUT_DIR}/bridge_main.step")
@@ -334,3 +620,12 @@ bridge_sub_step.export(f"{STEP_OUT_DIR}/bridge_sub.step")
 
 elevator_grip_step = elevator_grip_solid.rotate((0, 0, 0), (0, 1, 0), -90)
 elevator_grip_step.export(f"{STEP_OUT_DIR}/elevator_grip.step")
+
+base_step = base_solid
+base_step.export(f"{STEP_OUT_DIR}/elevator_base.step")
+
+cap_step = cap_solid
+cap_step.export(f"{STEP_OUT_DIR}/elevator_cap.step")
+
+tsumami_step = tsumami_solid
+tsumami_step.export(f"{STEP_OUT_DIR}/elevator_tsumami.step")
