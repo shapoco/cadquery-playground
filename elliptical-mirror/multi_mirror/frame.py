@@ -125,6 +125,8 @@ bridge_main_solid = (
     # .edges("%circle")
     # .edges("<<Y[0]")
     # .chamfer(2)
+    .edges("%line and >>Y and (>>Z or <<Z)")
+    .chamfer(1)
 )
 
 hole_stage = (
@@ -206,6 +208,113 @@ bridge_sub_solid = (
     .chamfer(CHAMFER)
 )
 
+GUIDE_POLE_DIAMETER = 4
+SCREW_DIAMETER = 6
+
+TSUMAMI_DIAMETER = 20
+TSUMAMI_HEIGHT = 20
+
+ELEVATOR_BASE_THICKNESS = 5
+SCREW_GUIDE_WIDTH = 20
+SCREW_GUIDE_THICKNESS = 12
+SCREW_GUIDE_HEIGHT = BRIDGE_HEIGHT - TSUMAMI_HEIGHT
+
+elevator_grip_solid = (
+    cq.Workplane("YZ")
+    .box(
+        CAP_MOUNT_DISTANCE_Y + 20,
+        BRIDGE_HEIGHT,
+        ELEVATOR_BASE_THICKNESS,
+        centered=(True, False, False),
+    )
+    .faces(">X")
+    .workplane(origin=(0, 0, 0))
+    .rect(TSUMAMI_DIAMETER + 5, TSUMAMI_HEIGHT, centered=(True, False))
+    .cutBlind(-100)
+)
+hole_points = [
+    (CAP_MOUNT_DISTANCE_Y / 2 + 5, 5),
+    (-CAP_MOUNT_DISTANCE_Y / 2 - 5, 5),
+    (CAP_MOUNT_DISTANCE_Y / 2 + 5, BRIDGE_HEIGHT - 5),
+    (-CAP_MOUNT_DISTANCE_Y / 2 - 5, BRIDGE_HEIGHT - 5),
+]
+elevator_grip_solid = (
+    elevator_grip_solid.faces(">X")
+    .workplane(origin=(0, 0, 0))
+    .pushPoints(hole_points)
+    .circle(M3_TAP_HOLE_DIAMETER / 2)
+    .cutBlind(-100)
+    .faces(">X")
+    .edges("%circle")
+    .chamfer(2)
+    .faces("<X")
+    .edges("%circle")
+    .chamfer(CHAMFER)
+    .edges("|X")
+    .chamfer(1)
+)
+
+screw_guide = cq.Workplane("XY").box(
+    5,
+    SCREW_GUIDE_WIDTH,
+    SCREW_GUIDE_HEIGHT,
+    centered=(False, True, False),
+)
+screw_guide = screw_guide.union(
+    cq.Workplane("XY")
+    .cylinder(SCREW_GUIDE_HEIGHT, SCREW_GUIDE_WIDTH / 2, centered=(True, True, False))
+    .translate((5, 0, 0))
+)
+screw_guide = screw_guide.cut(
+    cq.Workplane("XY")
+    .box(99, 99, 99, centered=(False, True, True))
+    .translate((SCREW_GUIDE_THICKNESS, 0, 0))
+)
+screw_guide = (
+    screw_guide.faces("<Z")
+    .workplane(origin=(0, 0, 0))
+    .pushPoints([(5, 0)])
+    .circle((SCREW_DIAMETER + GENERIC_GAP) / 2)
+    .cutBlind(-100)
+    .edges("%circle or >>X")
+    .fillet(CHAMFER)
+    .translate((ELEVATOR_BASE_THICKNESS, 0, BRIDGE_HEIGHT - SCREW_GUIDE_HEIGHT))
+)
+
+elevator_grip_solid = elevator_grip_solid.union(screw_guide)
+
+pole_guide = cq.Workplane("XY").box(
+    5,
+    10,
+    BRIDGE_HEIGHT - 20,
+    centered=(False, True, False),
+)
+pole_guide = pole_guide.union(
+    cq.Workplane("XY").cylinder(BRIDGE_HEIGHT - 20, 5, centered=(False, True, False))
+)
+pole_guide = (
+    pole_guide.faces(">Z")
+    .workplane(origin=(0, 0, 0))
+    .pushPoints([(5, 0)])
+    .circle((GUIDE_POLE_DIAMETER + GENERIC_GAP) / 2)
+    .cutBlind(-100)
+    .edges("%circle")
+    .chamfer(CHAMFER)
+)
+# cut_angle_deg = 90
+# pole_guide = pole_guide.cut(
+#     cq.Workplane("XZ")
+#     .rect(GUIDE_POLE_DIAMETER * 2, 100, centered=(False, True))
+#     .revolve(cut_angle_deg, (0, 0, 0), (0, 1, 0))
+#     .rotate((0, 0, 0), (0, 0, 1), -cut_angle_deg / 2)
+#     .translate((ELEVATOR_BASE_THICKNESS, 0, 0))
+# )
+pole_guide = pole_guide.translate(
+    (ELEVATOR_BASE_THICKNESS, CAP_MOUNT_DISTANCE_Y / 2 + 5, 10)
+)
+elevator_grip_solid = elevator_grip_solid.union(pole_guide)
+elevator_grip_solid = elevator_grip_solid.union(pole_guide.mirror("XZ"))
+
 bridge_moved = bridge_main_solid.translate((0, CAP_MOUNT_DISTANCE_X / 2 - 5, 0))
 show_object(bridge_moved, options={"color": "#888"})
 show_object(bridge_moved.mirror("XZ"), name="mirror", options={"color": "#888"})
@@ -213,9 +322,15 @@ show_object(bridge_moved.mirror("XZ"), name="mirror", options={"color": "#888"})
 for p in sub_beam_hole_points:
     show_object(bridge_sub_solid.translate((p[0], 0, p[1])), options={"color": "#111"})
 
+elevator_grip_moved = elevator_grip_solid.translate((BEAM_LENGTH / 2, 0, 0))
+show_object(elevator_grip_moved, options={"color": "#111"})
+show_object(elevator_grip_moved.mirror("YZ"), options={"color": "#111"})
 
 bridge_main_step = bridge_main_solid.rotate((0, 0, 0), (1, 0, 0), 90)
 bridge_main_step.export(f"{STEP_OUT_DIR}/bridge_main.step")
 
-bridge_sub_step = bridge_sub_solid.rotate((0, 0, 0), (1, 0, 0), 90)
+bridge_sub_step = bridge_sub_solid
 bridge_sub_step.export(f"{STEP_OUT_DIR}/bridge_sub.step")
+
+elevator_grip_step = elevator_grip_solid.rotate((0, 0, 0), (0, 1, 0), -90)
+elevator_grip_step.export(f"{STEP_OUT_DIR}/elevator_grip.step")
